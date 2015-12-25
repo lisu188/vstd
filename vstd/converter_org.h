@@ -1,6 +1,6 @@
 #pragma once
 
-#include "boost/python.hpp"
+#include <boost/python.hpp>
 #include "cast.h"
 
 template<typename Return, typename... Args>

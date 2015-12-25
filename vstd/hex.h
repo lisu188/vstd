@@ -1,29 +1,29 @@
 #pragma once
 
-class QString;
-
+#include <boost/algorithm/string.hpp>
 #include "defines.h"
 
 namespace vstd {
-    template<typename T>
-    force_inline QString to_hex ( T object ) {
+    template<typename T,typename U>
+    force_inline T to_hex ( U object ) {
         std::stringstream stream;
         stream << std::hex << object;
-        return QString::fromStdString ( stream.str() ).toUpper();
+        std::string s=boost::to_upper_copy<std::string>(stream.str());
+        return T(s.c_str());
     }
 
-    template<typename T>
-    force_inline QString to_hex ( T *object ) {
-        return to_hex ( long ( object ) );
+    template<typename T,typename U>
+    force_inline T to_hex ( U *object ) {
+        return to_hex<T,U> ( long ( object ) );
     }
 
-    template<typename T>
-    force_inline QString to_hex ( std::shared_ptr<T> object ) {
-        return to_hex ( object.get() );
+    template<typename T,typename U>
+    force_inline T to_hex ( std::shared_ptr<U> object ) {
+        return to_hex<T,U> ( object.get() );
     }
 
-    template<typename T>
-    force_inline QString to_hex_hash ( T object ) {
-        return to_hex ( hash_combine ( object ) );
+    template<typename T,typename U>
+    force_inline T to_hex_hash ( U object ) {
+        return to_hex<T,U> ( hash_combine ( object ) );
     }
 }

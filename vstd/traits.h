@@ -1,5 +1,7 @@
 #pragma once
 
+class QString;
+
 namespace vstd {
     template<bool B, typename T = void> using enable_if = std::enable_if<B, T>;
     template<bool B, typename T = void> using disable_if = std::enable_if<!B, T>;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "boost/range.hpp"
+#include <boost/range/adaptors.hpp>
 #include "traits.h"
 #include "future.h"
 

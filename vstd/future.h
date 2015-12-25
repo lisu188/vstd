@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/range/adaptors.hpp>
+#include <mutex>
 #include "util.h"
 #include "thread.h"
 
