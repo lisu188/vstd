@@ -8,8 +8,8 @@ namespace vstd {
     force_inline T to_hex ( U object ) {
         std::stringstream stream;
         stream << std::hex << object;
-        std::string s=boost::to_upper_copy<std::string>(stream.str());
-        return T(s.c_str());
+        std::string s=boost::to_upper_copy<std::string> ( stream.str() );
+        return T ( s.c_str() );
     }
 
     template<typename T,typename U>
