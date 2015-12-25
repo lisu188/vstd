@@ -1,0 +1,15 @@
+#pragma once
+
+#include "vstd/adaptors.h"
+#include "vstd/assert.h"
+#include "vstd/cast.h"
+#include "vstd/converter.h"
+#include "vstd/defines.h"
+#include "vstd/functional.h"
+#include "vstd/future.h"
+#include "vstd/hash.h"
+#include "vstd/hex.h"
+#include "vstd/lazy.h"
+#include "vstd/thread.h"
+#include "vstd/traits.h"
+#include "vstd/util.h"
