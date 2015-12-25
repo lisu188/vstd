@@ -1,8 +1,5 @@
 #pragma once
 
-#include "core/CGlobal.h"
-#include "core/CUtil.h"
-
 #include "defines.h"
 #include "traits.h"
 #include "util.h"
@@ -11,9 +8,8 @@
 namespace vstd {
     template<typename Function, typename... Arguments>
     force_inline void call_later ( Function target, Arguments... args ) {
-        //TODO: fix
-//        QApplication::postEvent ( CInvocationHandler::instance(),
-//                                  new CInvocationEvent ( vstd::bind ( target, args... ) ) );
+       QApplication::postEvent ( CInvocationHandler::instance(),
+                                 new CInvocationEvent ( vstd::bind ( target, args... ) ) );
     }
 
     template<typename Function, typename... Arguments>
@@ -24,9 +20,8 @@ namespace vstd {
 
     template<typename Function, typename... Arguments>
     force_inline void call_later_block ( Function target, Arguments... args ) {
-        //TODO: fix
-//        QApplication::sendEvent ( CInvocationHandler::instance(),
-//                                  new CInvocationEvent ( vstd::bind ( target, args... ) ) );
+        QApplication::sendEvent ( CInvocationHandler::instance(),
+                                  new CInvocationEvent ( vstd::bind ( target, args... ) ) );
     }
 
     template<typename Predicate>
