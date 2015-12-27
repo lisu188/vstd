@@ -13,17 +13,17 @@ namespace vstd {
     }
 
     template<typename T,typename U>
-    force_inline T to_hex ( U *object ) {
-        return to_hex<T,U> ( long ( object ) );
+    force_inline T to_hex ( U * object ) {
+        return to_hex<T> ( static_cast<std::size_t >( object ) );
     }
 
     template<typename T,typename U>
     force_inline T to_hex ( std::shared_ptr<U> object ) {
-        return to_hex<T,U> ( object.get() );
+        return to_hex<T,U*> ( object.get() );
     }
 
     template<typename T,typename U>
     force_inline T to_hex_hash ( U object ) {
-        return to_hex<T,U> ( hash_combine ( object ) );
+        return to_hex<T,std::size_t > ( hash_combine ( object ) );
     }
 }
