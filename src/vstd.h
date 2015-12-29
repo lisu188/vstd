@@ -1,16 +1,19 @@
 #pragma once
 
-#include "vstd/adaptors.h"
-#include "vstd/assert.h"
-#include "vstd/cast.h"
-#include "vstd/converter.h"
-#include "vstd/defines.h"
-#include "vstd/functional.h"
-#include "vstd/future.h"
-#include "vstd/hash.h"
-#include "vstd/hex.h"
-#include "vstd/lazy.h"
-#include "vstd/thread.h"
-#include "vstd/traits.h"
-#include "vstd/util.h"
-#include "vstd/chain.h"
+#ifdef Py_PYTHON_H
+    #include "converter.h"
+#endif
+
+#include "adaptors.h"
+#include "assert.h"
+#include "cast.h"
+#include "defines.h"
+#include "functional.h"
+#include "future.h"
+#include "hash.h"
+#include "hex.h"
+#include "lazy.h"
+#include "thread.h"
+#include "traits.h"
+#include "util.h"
+#include "chain.h"
