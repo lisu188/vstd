@@ -14,7 +14,7 @@ namespace vstd {
 
     template<typename T,typename U>
     force_inline T to_hex ( U * object ) {
-        return to_hex<T> ( static_cast<std::size_t >( object ) );
+        return to_hex<T> ( static_cast<std::size_t > ( object ) );
     }
 
     template<typename T,typename U>
