@@ -13,3 +13,4 @@
 #include "vstd/thread.h"
 #include "vstd/traits.h"
 #include "vstd/util.h"
+#include "vstd/chain.h"
