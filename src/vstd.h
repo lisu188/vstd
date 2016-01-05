@@ -1,9 +1,6 @@
 #pragma once
 
-#ifdef Py_PYTHON_H
-    #include "converter.h"
-#endif
-
+#include "vstring.h"
 #include "adaptors.h"
 #include "assert.h"
 #include "cast.h"
@@ -17,3 +14,10 @@
 #include "traits.h"
 #include "util.h"
 #include "chain.h"
+
+#ifdef Py_PYTHON_H
+    #include "converter.h"
+#endif
+
+
+
