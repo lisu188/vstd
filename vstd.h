@@ -2,7 +2,7 @@
 
 #include "vstring.h"
 #include "adaptors.h"
-#include "assert.h"
+#include "vassert.h"
 #include "cast.h"
 #include "defines.h"
 #include "functional.h"
