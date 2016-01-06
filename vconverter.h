@@ -2,7 +2,6 @@
 
 #include <boost/python.hpp>
 #include "vcast.h"
-
 template<typename Return, typename... Args>
 struct builder {
     static void build(PyObject *obj_ptr, boost::python::converter::rvalue_from_python_stage1_data *data) {

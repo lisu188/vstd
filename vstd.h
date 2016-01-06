@@ -18,7 +18,7 @@
 #include "vmeta.h"
 
 #ifdef Py_PYTHON_H
-#include "converter.h"
+#include "vconverter.h"
 #endif
 
 
