@@ -221,8 +221,8 @@ namespace vstd {
 
     template<typename return_type,
             typename argument_type>
-    class vfuture : public std::enable_shared_from_this<vfuture<return_type, argument_type>> {
-        friend class __gnu_cxx::new_allocator<vfuture<return_type, argument_type>>;
+    class future : public std::enable_shared_from_this<future<return_type, argument_type>> {
+        friend class __gnu_cxx::new_allocator<future<return_type, argument_type>>;
 
     public:
         typedef typename detail::function_type<return_type, argument_type>::type function;
@@ -244,7 +244,7 @@ namespace vstd {
     private:
         std::shared_ptr<detail::ccall<return_type, argument_type>> _call;
 
-        vfuture(std::shared_ptr<detail::ccall<return_type, argument_type>> call, bool start = true) :
+        future(std::shared_ptr<detail::ccall<return_type, argument_type>> call, bool start = true) :
                 _call(call) {
             if (start) {
                 _call->call();
@@ -258,14 +258,14 @@ namespace vstd {
                 _new_call->setArgument(arg);
                 _new_call->call();
             });
-            return std::make_shared<vfuture<_return_type, _first_arg>>(_new_call, false);
+            return std::make_shared<future<_return_type, _first_arg>>(_new_call, false);
         }
     };
 
     namespace detail {
         template<typename return_type, typename first_arg>
         auto make_future(std::shared_ptr<detail::ccall<return_type, first_arg>> call) {
-            return std::make_shared<vstd::vfuture<return_type, first_arg>>(call);
+            return std::make_shared<vstd::future<return_type, first_arg>>(call);
         }
     }
 
