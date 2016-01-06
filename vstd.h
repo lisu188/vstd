@@ -14,9 +14,10 @@
 #include "traits.h"
 #include "util.h"
 #include "chain.h"
+#include "logger.h"
 
 #ifdef Py_PYTHON_H
-    #include "converter.h"
+#include "converter.h"
 #endif
 
 

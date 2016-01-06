@@ -1,13 +1,13 @@
 #pragma once
 
 #include "defines.h"
+#include "logger.h"
 
 namespace vstd {
     template<typename T, typename U, typename V=int>
     force_inline V fail_if ( T arg, U msg ) {
         if ( arg ) {
-            //TODO: fix
-            //qFatal(msg);
+            vstd::logger::fatal ( msg );
         }
         return V();
     }
