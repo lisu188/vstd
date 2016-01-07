@@ -4,24 +4,24 @@
 #include "vlogger.h"
 
 namespace vstd {
-    template<typename T, typename U, typename V=int>
-    force_inline V fail_if(T arg, U msg) {
+    template<typename T, typename... Args>
+    force_inline T fail_if(T arg, Args... args) {
         if (arg) {
-            vstd::logger::fatal(msg);
+            vstd::logger::fatal(args...);
         }
-        return V();
+        return arg;
     }
 
-    template<typename T, typename U=int>
-    force_inline U fail(T msg) {
-        return fail_if<bool, T>(true, msg);
+    template<typename T, typename... Args>
+     force_inline void fail(T msg, Args... args)  {
+        fail_if<bool, T>(true, args...);
     }
 
-    template<typename T, typename U>
-    force_inline T not_null(T t, U msg = U()) {
+    template<typename T, typename... Args>
+     force_inline T not_null(T t,Args... args) {
         if (t) {
             return t;
         }
-        return fail<T>(msg);
+        fail(args...);
     }
 }

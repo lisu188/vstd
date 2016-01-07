@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include "vdefines.h"
 
 namespace vstd {
     class logger {
