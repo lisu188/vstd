@@ -31,9 +31,9 @@ namespace vstd {
 
         virtual void set(boost::any object, boost::any value) = 0;
 
-        virtual const boost::typeindex::type_info &object_type() = 0;
+        virtual boost::typeindex::type_index object_type() = 0;
 
-        virtual const boost::typeindex::type_info &value_type() = 0;
+        virtual boost::typeindex::type_index value_type() = 0;
     };
 
     namespace detail {
@@ -61,12 +61,12 @@ namespace vstd {
                 _setter(boost::any_cast<ObjectType>(object), boost::any_cast<PropertyType>(value));
             }
 
-            const boost::typeindex::type_info &object_type() override {
-                return boost::typeindex::type_id<ObjectType>().type_info();
+            boost::typeindex::type_index object_type() override {
+                return boost::typeindex::type_id<ObjectType>();
             }
 
-            const boost::typeindex::type_info &value_type() override {
-                return boost::typeindex::type_id<PropertyType>().type_info();
+            boost::typeindex::type_index value_type() override {
+                return boost::typeindex::type_id<PropertyType>();
             }
         };
     }
