@@ -38,4 +38,13 @@ namespace vstd {
     std::string str(T c) {
         return std::string(c);
     }
+
+    template<typename T>
+    std::pair<int, bool> to_int(T s) {
+        try {
+            return std::make_pair(std::stoi(s), true);
+        } catch (...) {
+            return std::make_pair(0, false);
+        }
+    };
 }
