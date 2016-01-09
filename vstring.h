@@ -34,6 +34,10 @@ namespace vstd {
         return ltrim(rtrim(s));
     }
 
+    bool is_empty(std::string string) {
+        return trim(string).length() == 0;
+    }
+
     template<typename T>
     std::string str(T c) {
         return std::string(c);
