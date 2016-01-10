@@ -6,7 +6,6 @@
 #include <memory>
 
 #define V_VOID boost::typeindex::type_id<void>()
-#define V_NONE vstd::empty_meta
 
 #define V_STRING(X) #X
 
@@ -43,8 +42,8 @@ namespace vstd {
     namespace detail {
         template<typename ObjectType, typename PropertyType>
         class property_impl : public property {
-            std::function<PropertyType(ObjectType)> _getter;
-            std::function<void(ObjectType, PropertyType)> _setter;
+            std::function<PropertyType(ObjectType *)> _getter;
+            std::function<void(ObjectType *, PropertyType)> _setter;
             std::string _name;
         public:
             template<typename Getter, typename Setter>
@@ -58,11 +57,12 @@ namespace vstd {
             }
 
             boost::any get(boost::any object) override {
-                return _getter(boost::any_cast<ObjectType>(object));
+                return _getter(boost::any_cast<std::shared_ptr<ObjectType>>(object).get());
             }
 
             void set(boost::any object, boost::any value) override {
-                _setter(boost::any_cast<ObjectType>(object), boost::any_cast<PropertyType>(value));
+                _setter(boost::any_cast<std::shared_ptr<ObjectType>>(object).get(),
+                        boost::any_cast<PropertyType>(value));
             }
 
             boost::typeindex::type_index object_type() override {
@@ -118,18 +118,21 @@ namespace vstd {
         template<typename... Args>
         void _add(std::shared_ptr<property> prop, Args... props) {
             _props[prop->name()] = prop;
-            add(props...);
+            _add(props...);
         };
 
         template<typename ObjectType, typename PropertyType>
-        std::shared_ptr<property> _get_property_object(ObjectType ob, std::string name) {
+        std::shared_ptr<property> _get_property_object(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_props, name)) {
                 return _props[name];
-            } else if (vstd::ctn(ob._dynamic_props, name)) {
-                return ob._dynamic_props[name];
+            } else if (vstd::ctn(ob->_dynamic_props, name)) {
+                return ob->_dynamic_props[name];
+            } else if (auto super_p = super() ? super()->_get_property_object<ObjectType, PropertyType>(ob, name)
+                                              : nullptr) {
+                return super_p;
             }
-            ob._dynamic_props[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(name);
-            return _get_property_object<PropertyType>(ob, name);
+            ob->_dynamic_props[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(name);
+            return _get_property_object<ObjectType, PropertyType>(ob, name);
         }
 
     public:
@@ -142,31 +145,57 @@ namespace vstd {
             return _super;
         }
 
-        template<typename ObjectType, typename PropertyType>
-        void set_property(std::string prop, ObjectType t, PropertyType p) {
-            _get_property_object<PropertyType>(t, prop)->set(boost::any(t), boost::any(p));
+        std::string name() {
+            return _name;
         }
 
         template<typename ObjectType, typename PropertyType>
-        PropertyType get_property(std::string prop, ObjectType t) {
-            return boost::any_cast<PropertyType>(_get_property_object<PropertyType>(prop, t)->get(boost::any(t)));
+        void set_property(std::string prop, std::shared_ptr<ObjectType> t, PropertyType p) {
+            _get_property_object<ObjectType, PropertyType>(t, prop)->set(boost::any(t), boost::any(p));
+        }
+
+        template<typename ObjectType, typename PropertyType>
+        PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
+                                  typename vstd::disable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
+            return boost::any_cast<PropertyType>(
+                    _get_property_object<ObjectType, PropertyType>(t, prop)->get(boost::any(t)));
+        }
+
+        template<typename ObjectType, typename PropertyType>
+        PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
+                                  typename vstd::enable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
+            return _get_property_object<ObjectType, PropertyType>(t, prop)->get(boost::any(t));
         }
 
         template<typename ObjectType>
-        boost::typeindex::type_index get_property_type(ObjectType ob, std::string name) {
+        boost::typeindex::type_index get_property_type(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_props, name)) {
                 return _props[name]->value_type();
             } else if (vstd::ctn(ob->_dynamic_props, name)) {
                 return ob->_dynamic_props[name]->value_type();
+            } else if (super()) {
+                return super()->get_property_type<ObjectType>(ob, name);
             }
             return boost::typeindex::type_id<void>();
         }
+
+        template<typename ObjectType>
+        std::set<std::shared_ptr<vstd::property>> properties(std::shared_ptr<ObjectType> ob) {
+            std::set<std::shared_ptr<vstd::property>> props;
+            auto vals = _props | boost::adaptors::map_values;
+            props.insert(vals.begin(), vals.end());
+            vals = ob->_dynamic_props | boost::adaptors::map_values;
+            props.insert(vals.begin(), vals.end());
+            return props;
+        }
+
+        class empty {
+        public:
+            static std::shared_ptr<vstd::meta> static_meta() {
+                return nullptr;
+            }
+        };
     };
 
-    class empty_meta {
-    public:
-        static std::shared_ptr<vstd::meta> static_meta() {
-            return nullptr;
-        }
-    };
+
 }

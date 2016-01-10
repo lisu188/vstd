@@ -4,7 +4,7 @@ namespace vstd {
     template<typename T, typename... U>
     class lazy {
     public:
-        std::shared_ptr<T> get(U... parent) {
+        std::shared_ptr <T> get(U... parent) {
             if (ptr) {
                 return ptr;
             }
@@ -12,6 +12,6 @@ namespace vstd {
         }
 
     private :
-        std::shared_ptr<T> ptr;
+        std::shared_ptr <T> ptr;
     };
 }

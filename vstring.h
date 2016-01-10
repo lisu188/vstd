@@ -5,50 +5,74 @@
 #include <functional>
 #include <cctype>
 #include <locale>
+#include "vdefines.h"
 
 namespace vstd {
-    template<typename T=std::string>
-    T replace(T str, T from, T to) {
+    template<typename T=void>
+    std::string replace(std::string str, std::string from, std::string to) {
         size_t start_pos = str.find(from);
         if (start_pos == std::string::npos) {
-            return false;
+            return str;
         }
         str.replace(start_pos, from.length(), to);
-        return str;
+        return replace(str, from, to);
     }
 
-    template<typename T=std::string>
-    T ltrim(T s) {
+    force_inline  std::string ltrim(std::string s) {
         s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
         return s;
     }
 
-    template<typename T=std::string>
-    T rtrim(T s) {
+    force_inline  std::string rtrim(std::string s) {
         s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
         return s;
     }
 
-    template<typename T=std::string>
-    T trim(T s) {
+    force_inline   std::string trim(std::string s) {
         return ltrim(rtrim(s));
     }
 
-    bool is_empty(std::string string) {
+    force_inline    bool is_empty(std::string string) {
         return trim(string).length() == 0;
     }
 
     template<typename T>
-    std::string str(T c) {
+    force_inline    std::string str(T c) {
         return std::string(c);
     }
 
-    template<typename T>
-    std::pair<int, bool> to_int(T s) {
+    force_inline    std::pair<int, bool> to_int(std::string s) {
         try {
             return std::make_pair(std::stoi(s), true);
         } catch (...) {
             return std::make_pair(0, false);
         }
     };
+
+    force_inline   std::string join(std::list<std::string> list, std::string sep) {
+        std::stringstream stream;
+        int i = 0;
+        for (std::string str:list) {
+            stream << str;
+            if (i++ != list.size() - 1) {
+                stream << sep;
+            }
+        }
+        return stream.str();
+    }
+
+    force_inline    std::vector<std::string> split(std::string s, char delim) {
+        std::vector<std::string> elems;
+        std::stringstream ss(s);
+        std::string item;
+        while (std::getline(ss, item, delim)) {
+            elems.push_back(item);
+        }
+        return elems;
+    }
+
+    template<typename T, typename U>
+    force_inline   bool string_equals(T a, U b) {
+        return str(a) == str(b);
+    }
 }

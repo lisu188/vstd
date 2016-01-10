@@ -16,9 +16,9 @@ namespace vstd {
     }
 
     template<typename T, typename U>
-    force_inline std::shared_ptr<T> cast(U ptr,
-                                         typename vstd::disable_if<vstd::is_shared_ptr<T>::value>::type * = 0,
-                                         typename vstd::enable_if<vstd::is_shared_ptr<U>::value>::type * = 0) {
+    force_inline std::shared_ptr <T> cast(U ptr,
+                                          typename vstd::disable_if<vstd::is_shared_ptr<T>::value>::type * = 0,
+                                          typename vstd::enable_if<vstd::is_shared_ptr<U>::value>::type * = 0) {
         return std::dynamic_pointer_cast<T>(ptr);
     }
 
