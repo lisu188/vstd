@@ -16,6 +16,7 @@
 #include "vchain.h"
 #include "vlogger.h"
 #include "vmeta.h"
+#include "vneuro.h"
 
 #ifdef Py_PYTHON_H
 #include "vconverter.h"

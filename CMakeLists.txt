@@ -3,8 +3,6 @@ project(vstd)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
-set(BOOST_INCLUDEDIR $ENV{BOOST})
-set(BOOST_LIBRARYDIR $ENV{BOOST}/stage/lib)
 FIND_PACKAGE(Boost 1.60)
 
 include_directories(${Boost_INCLUDE_DIRS})
@@ -28,6 +26,7 @@ set(SOURCE_FILES
         vassert.h
         vstd.h
         vstring.h
-        vmeta.h)
+        vmeta.h
+        vneuro.h)
 
 add_executable(vstd ${SOURCE_FILES} main.cpp)

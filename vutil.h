@@ -1,5 +1,11 @@
 #pragma once
 
+#include <list>
+#include <set>
+#include <chrono>
+#include <mutex>
+#include <condition_variable>
+#include <boost/pool/pool_alloc.hpp>
 #include <boost/any.hpp>
 #include <queue>
 #include "vtraits.h"
@@ -90,4 +96,37 @@ namespace vstd {
             callback(value);
         }
     };
+
+    std::mt19937_64 &rng() {
+        static std::mt19937_64 rng;
+        return rng;
+    }
+
+    std::uniform_real_distribution<double> &unif() {
+        static std::uniform_real_distribution<double> unif(-0.5, 0.5);
+        return unif;
+    }
+
+    double rand() {
+        return unif()(rng());
+    };
+
+    template<typename T>
+    static T *allocate(size_t size) {
+        static boost::pool_allocator<T> _pool;
+        return _pool.allocate(size);
+    }
+
+    template<typename T>
+    static void deallocate(T *t, size_t size) {
+        static boost::pool_allocator<T> _pool;
+        _pool.deallocate(t, size);
+    }
+
+    template<typename T>
+    typename T::value_type *as_array(T vec) {
+        auto ret = vstd::allocate<typename T::value_type>(vec.size());
+        std::copy(std::begin(vec), std::end(vec), ret);
+        return ret;
+    }
 }
