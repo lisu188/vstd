@@ -3,8 +3,8 @@
 namespace vstd {
     template<typename T=void>
     class neuro {
-        std::vector<size_t> _str;
-        std::vector<size_t> _dim;
+        std::vector<int> _str;
+        std::vector<int> _dim;
         double _alfa, _beta, _eta;
         int _nw;
         std::vector<std::pair<double *, double *>> teachers;
@@ -119,8 +119,23 @@ namespace vstd {
             return erms / teachers.size();
         }
 
-        neuro(std::initializer_list<size_t>
-              str,
+        double test() {
+            double erms = 0;
+            double tmp;
+            double *out_t, *out_n;
+            for (auto teacher : tests) {
+                tmp = 0;
+                out_t = teacher.second;
+                o(teacher.first);
+                for (int k = 0; k < _str[_nw - 1]; k++) {
+                    tmp += std::pow(out_t[k] - _o[_nw - 1][k], 2);
+                }
+                erms += std::sqrt(tmp / _str[_nw - 1]);
+            }
+            return erms / teachers.size();
+        }
+
+        neuro(std::vector<int> str,
               double alfa,
               double beta,
               double eta
