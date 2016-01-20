@@ -1,6 +1,6 @@
 #pragma once
 
-class QString;
+#include <string>
 
 namespace vstd {
     template<bool B, typename T = void> using enable_if = std::enable_if<B, T>;
@@ -131,7 +131,7 @@ namespace vstd {
 
     template<class T>
     struct is_range<T, typename enable_if_type<typename T::value_type>::type,
-            typename disable_if<is_same_clear<T, QString>::value>::type> : std::true_type {
+            typename disable_if<is_same_clear<T, std::string>::value>::type> : std::true_type {
     };
 
     template<class T, class E1 = void, class E2=void, class E3=void>
@@ -141,7 +141,7 @@ namespace vstd {
     template<class T>
     struct is_container<T, typename enable_if_type<typename T::value_type>::type,
             typename enable_if<has_insert<T, typename T::value_type>::value>::type,
-            typename disable_if<is_same_clear<T, QString>::value>::type> : std::true_type {
+            typename disable_if<is_same_clear<T, std::string>::value>::type> : std::true_type {
     };
 
     template<class T, class E1 = void>

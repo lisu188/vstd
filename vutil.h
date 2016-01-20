@@ -25,7 +25,7 @@ namespace vstd {
 
     template<typename A, typename B>
     force_inline auto type_pair() {
-        return std::make_pair(boost::typeindex::type_id<A>(), boost::typeindex::type_id<A>());
+        return std::make_pair(boost::typeindex::type_id<A>(), boost::typeindex::type_id<B>());
     }
 
     template<typename F, typename... Args>
@@ -35,6 +35,7 @@ namespace vstd {
 
     template<typename Range, typename Value=typename range_traits<Range>::value_type>
     force_inline std::set<Value> collect(Range r) {
+
         return cast<std::set<Value>>(r);
     }
 

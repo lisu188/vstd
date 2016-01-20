@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdio.h>
 #include <string.h>
 #include <list>
@@ -8,7 +9,9 @@
 #include <functional>
 #include <cctype>
 #include <locale>
+#include <boost/filesystem.hpp>
 #include "vdefines.h"
+
 namespace vstd {
     template<typename T=void>
     std::string replace(std::string str, std::string from, std::string to) {
@@ -19,28 +22,34 @@ namespace vstd {
         str.replace(start_pos, from.length(), to);
         return replace(str, from, to);
     }
+
     template<typename T=void>
     force_inline std::string ltrim(std::string s) {
         s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
         return s;
     }
+
     template<typename T=void>
     force_inline std::string rtrim(std::string s) {
         s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
         return s;
     }
+
     template<typename T=void>
     force_inline  std::string trim(std::string s) {
         return ltrim(rtrim(s));
     }
+
     template<typename T=void>
     force_inline bool is_empty(std::string string) {
         return trim(string).length() == 0;
     }
+
     template<typename T>
     force_inline std::string str(T c) {
         return std::string(c);
     }
+
     template<typename T=void>
     force_inline std::pair<int, bool> to_int(std::string s) {
         try {
@@ -49,6 +58,7 @@ namespace vstd {
             return std::make_pair(0, false);
         }
     };
+
     template<typename T=void>
     force_inline  std::string join(std::list<std::string> list, std::string sep) {
         std::stringstream stream;
@@ -61,6 +71,7 @@ namespace vstd {
         }
         return stream.str();
     }
+
     template<typename T=void>
     force_inline std::vector<std::string> split(std::string s, char delim) {
         std::vector<std::string> elems;
@@ -71,10 +82,12 @@ namespace vstd {
         }
         return elems;
     }
+
     template<typename T, typename U>
     force_inline  bool string_equals(T a, U b) {
         return str(a) == str(b);
     }
+
     template<typename T=void>
     force_inline bool ends_with(std::string full_string, std::string ending) {
         if (full_string.length() >= ending.length()) {
@@ -83,6 +96,7 @@ namespace vstd {
             return false;
         }
     }
+
     template<typename T=void>
     wchar_t *to_wchar(const char *text) {
         size_t size = strlen(text) + 1;
@@ -90,6 +104,7 @@ namespace vstd {
         mbstowcs(wa, text, size);
         return wa;
     }
+
     template<typename T=void>
     wchar_t **to_wchar(int size, const char **text) {
         wchar_t **wa = new wchar_t *[size];
@@ -97,5 +112,10 @@ namespace vstd {
             wa[i] = to_wchar(text[i]);
         }
         return wa;
+    }
+
+    template<typename T=void>
+    std::string stem(const std::string &script) {
+        return boost::filesystem::path(script).stem().string();
     }
 }

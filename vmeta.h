@@ -106,6 +106,15 @@ namespace vstd {
     }
 
     class meta {
+    public:
+        class empty {
+        public:
+            static std::shared_ptr<vstd::meta> static_meta() {
+                return nullptr;
+            }
+        };
+
+    private:
         std::string _name;
         std::unordered_map<std::string, std::shared_ptr<property>> _props;
         std::shared_ptr<meta> _super;
@@ -118,6 +127,11 @@ namespace vstd {
         template<typename... Args>
         void _add(std::shared_ptr<property> prop, Args... props) {
             _props[prop->name()] = prop;
+            _add(props...);
+        };
+
+        template<typename... Args>
+        void _add(vstd::meta::empty val, Args... props) {
             _add(props...);
         };
 
@@ -188,13 +202,6 @@ namespace vstd {
             props.insert(vals.begin(), vals.end());
             return props;
         }
-
-        class empty {
-        public:
-            static std::shared_ptr<vstd::meta> static_meta() {
-                return nullptr;
-            }
-        };
     };
 
 
