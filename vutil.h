@@ -14,40 +14,40 @@
 
 namespace vstd {
     template<typename Container, typename Value>
-    force_inline bool ctn(Container &container, Value value) {
+    bool ctn(Container &container, Value value) {
         return container.find(value) != container.end();
     }
 
     template<typename T, typename U>
-    force_inline bool castable(std::shared_ptr<U> ptr) {
+    bool castable(std::shared_ptr<U> ptr) {
         return std::dynamic_pointer_cast<T>(ptr).operator bool();
     }
 
     template<typename A, typename B>
-    force_inline auto type_pair() {
+    auto type_pair() {
         return std::make_pair(boost::typeindex::type_id<A>(), boost::typeindex::type_id<B>());
     }
 
     template<typename F, typename... Args>
-    force_inline std::function<typename function_traits<F>::return_type()> bind(F f, Args... args) {
+    std::function<typename function_traits<F>::return_type()> bind(F f, Args... args) {
         return std::bind(f, args...);
     }
 
     template<typename Range, typename Value=typename range_traits<Range>::value_type>
-    force_inline std::set<Value> collect(Range r) {
+    std::set<Value> collect(Range r) {
 
         return cast<std::set<Value>>(r);
     }
 
     template<typename T>
-    force_inline typename T::value_type pop(T &t) {
+    typename T::value_type pop(T &t) {
         auto x = t.front();
         t.pop();
         return x;
     }
 
     template<typename T>
-    force_inline typename T::value_type pop_p(T &t) {
+    typename T::value_type pop_p(T &t) {
         auto x = t.top();
         t.pop();
         return x;
@@ -56,16 +56,16 @@ namespace vstd {
     template<typename F,
             typename ret=typename vstd::function_traits<F>::return_type,
             typename arg=typename vstd::function_traits<F>::template arg<0>::type>
-    force_inline std::function<ret(arg)> make_function(F f,
-                                                       typename vstd::disable_if<std::is_void<arg>::value>::type * = 0) {
+    std::function<ret(arg)> make_function(F f,
+                                          typename vstd::disable_if<std::is_void<arg>::value>::type * = 0) {
         return std::function<ret(arg)>(f);
     }
 
     template<typename F,
             typename ret=typename vstd::function_traits<F>::return_type,
             typename arg=typename vstd::function_traits<F>::template arg<0>::type>
-    force_inline std::function<ret()> make_function(F f,
-                                                    typename vstd::enable_if<std::is_void<arg>::value>::type * = 0) {
+    std::function<ret()> make_function(F f,
+                                       typename vstd::enable_if<std::is_void<arg>::value>::type * = 0) {
         return std::function<ret()>(f);
     }
 

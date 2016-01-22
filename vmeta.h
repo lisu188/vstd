@@ -4,6 +4,7 @@
 #include <functional>
 #include <unordered_map>
 #include <memory>
+#include "vany.h"
 
 #define V_VOID boost::typeindex::type_id<void>()
 
@@ -57,12 +58,12 @@ namespace vstd {
             }
 
             boost::any get(boost::any object) override {
-                return _getter(boost::any_cast<std::shared_ptr<ObjectType>>(object).get());
+                return _getter(vstd::any_cast<std::shared_ptr<ObjectType>>(object).get());
             }
 
             void set(boost::any object, boost::any value) override {
-                _setter(boost::any_cast<std::shared_ptr<ObjectType>>(object).get(),
-                        boost::any_cast<PropertyType>(value));
+                _setter(vstd::any_cast<std::shared_ptr<ObjectType>>(object).get(),
+                        vstd::any_cast<PropertyType>(value));
             }
 
             boost::typeindex::type_index object_type() override {
@@ -92,7 +93,7 @@ namespace vstd {
             }
 
             void set(boost::any object, boost::any value) override {
-                _value = boost::any_cast<PropertyType>(value);
+                _value = vstd::any_cast<PropertyType>(value);
             }
 
             boost::typeindex::type_index object_type() override {
@@ -171,7 +172,7 @@ namespace vstd {
         template<typename ObjectType, typename PropertyType>
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
                                   typename vstd::disable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
-            return boost::any_cast<PropertyType>(
+            return vstd::any_cast<PropertyType>(
                     _get_property_object<ObjectType, PropertyType>(t, prop)->get(boost::any(t)));
         }
 
