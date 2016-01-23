@@ -98,16 +98,19 @@ namespace vstd {
         }
     };
 
+    template<typename T=void>
     std::mt19937_64 &rng() {
         static std::mt19937_64 rng;
         return rng;
     }
 
+    template<typename T=void>
     std::uniform_real_distribution<double> &unif() {
         static std::uniform_real_distribution<double> unif(-0.5, 0.5);
         return unif;
     }
 
+    template<typename T=void>
     double rand() {
         return unif()(rng());
     };
