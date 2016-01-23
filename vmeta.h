@@ -14,6 +14,7 @@
 private: \
 friend class vstd::meta; \
 std::unordered_map<std::string, std::shared_ptr<vstd::property>> _dynamic_props; \
+virtual std::unordered_map<std::string, std::shared_ptr<vstd::property>> &dynamic_props(){return _dynamic_props;} \
 public: \
 static std::shared_ptr<vstd::meta> static_meta(){ \
     static std::shared_ptr<vstd::meta> _meta=std::make_shared<vstd::meta>(V_STRING(CLASS),SUPER::static_meta(),__VA_ARGS__); \
@@ -140,13 +141,13 @@ namespace vstd {
         std::shared_ptr<property> _get_property_object(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_props, name)) {
                 return _props[name];
-            } else if (vstd::ctn(ob->_dynamic_props, name)) {
-                return ob->_dynamic_props[name];
+            } else if (vstd::ctn(ob->dynamic_props(), name)) {
+                return ob->dynamic_props()[name];
             } else if (auto super_p = super() ? super()->_get_property_object<ObjectType, PropertyType>(ob, name)
                                               : nullptr) {
                 return super_p;
             }
-            ob->_dynamic_props[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(name);
+            ob->dynamic_props()[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(name);
             return _get_property_object<ObjectType, PropertyType>(ob, name);
         }
 
@@ -186,8 +187,8 @@ namespace vstd {
         boost::typeindex::type_index get_property_type(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_props, name)) {
                 return _props[name]->value_type();
-            } else if (vstd::ctn(ob->_dynamic_props, name)) {
-                return ob->_dynamic_props[name]->value_type();
+            } else if (vstd::ctn(ob->dynamic_props(), name)) {
+                return ob->dynamic_props()[name]->value_type();
             } else if (super()) {
                 return super()->get_property_type<ObjectType>(ob, name);
             }
@@ -199,7 +200,7 @@ namespace vstd {
             std::set<std::shared_ptr<vstd::property>> props;
             auto vals = _props | boost::adaptors::map_values;
             props.insert(vals.begin(), vals.end());
-            vals = ob->_dynamic_props | boost::adaptors::map_values;
+            vals = ob->dynamic_props() | boost::adaptors::map_values;
             props.insert(vals.begin(), vals.end());
             return props;
         }

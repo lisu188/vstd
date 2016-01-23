@@ -19,8 +19,8 @@ namespace vstd {
 
     template<typename T>
     T any_cast(boost::any val) {
-        auto key = std::pair<boost::typeindex::type_index, boost::typeindex::type_index>(val.type(),
-                                                                                         boost::typeindex::type_id<T>());
+        auto key = std::pair<boost::typeindex::type_index, boost::typeindex::type_index>( boost::typeindex::type_id<T>(),
+                                                                                       val.type() );
         if (vstd::ctn(detail::registry(), key)) {
             return boost::any_cast<T>(detail::registry()[key](val));
         }

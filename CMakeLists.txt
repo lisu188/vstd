@@ -27,6 +27,7 @@ set(SOURCE_FILES
         vstd.h
         vstring.h
         vmeta.h
-        vneuro.h)
+        vneuro.h
+        vany.h)
 
 add_executable(vstd ${SOURCE_FILES} main.cpp)
