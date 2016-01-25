@@ -3,7 +3,7 @@ project(vstd)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
-FIND_PACKAGE(Boost 1.60)
+FIND_PACKAGE(Boost 1.58 COMPONENTS system REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
 
@@ -31,3 +31,5 @@ set(SOURCE_FILES
         vany.h)
 
 add_executable(vstd ${SOURCE_FILES} main.cpp)
+
+target_link_libraries(vstd ${Boost_LIBRARIES})

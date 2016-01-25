@@ -67,7 +67,7 @@ namespace vstd {
         template<typename... Args>
         struct builder<bool, Args...> {
             static void build(PyObject *obj_ptr,
-                          boost::python::converter::rvalue_from_python_stage1_data *data) {
+                              boost::python::converter::rvalue_from_python_stage1_data *data) {
                 void *storage = ((boost::python::converter::rvalue_from_python_storage
                         <std::function<bool(Args...) >> *) data)->storage.bytes;
                 boost::python::object func = boost::python::object(
@@ -83,6 +83,7 @@ namespace vstd {
 
         template<class Source, class Target>
         struct implicit_cast {
+
             static void *convertible(PyObject *obj) {
                 return boost::python::converter::implicit_rvalue_convertible_from_python(obj,
                                                                                          boost::python::converter::registered<Source>::converters)
@@ -102,27 +103,45 @@ namespace vstd {
                 data->convertible = storage;
             }
         };
-}
+    }
+
+    namespace detail {
+        template<typename Return, typename... Args>
+        struct function_converter {
+            function_converter() {
+                boost::python::converter::registry::push_back(
+                        [](PyObject *obj_ptr) -> void * {
+                            if (PyCallable_Check(obj_ptr)) { return obj_ptr; }
+                            return nullptr;
+                        },
+                        detail::builder<Return, Args...>::build,
+                        boost::python::type_id<std::function<Return(Args...) >>());
+            }
+        };
+    }
+
     template<typename Return, typename... Args>
     struct function_converter {
         function_converter() {
-            boost::python::converter::registry::push_back(
-                    [](PyObject *obj_ptr) -> void * {
-                        if (PyCallable_Check(obj_ptr)) { return obj_ptr; }
-                        return nullptr;
-                    },
-                    detail::builder<Return, Args...>::build,
-                    boost::python::type_id<std::function<Return(Args...) >>());
+            static detail::function_converter<Return, Args...> _dummy;
         }
     };
 
-    template<class Source, class Target>
-    void implicitly_convertible_cast(boost::type<Source> * = 0, boost::type<Target> * = 0) {
-        typedef detail::implicit_cast<Source, Target> functions;
+    namespace detail {
+        template<class Source, class Target>
+        struct implicitly_convertible_cast {
+            implicitly_convertible_cast(boost::type<Source> * = 0, boost::type<Target> * = 0) {
+                boost::python::converter::registry::push_back(
+                        &detail::implicit_cast<Source, Target>::convertible,
+                        &detail::implicit_cast<Source, Target>::construct,
+                        boost::python::type_id<Target>(),
+                        &boost::python::converter::expected_from_python_type_direct<Source>::get_pytype);
+            }
+        };
+    }
 
-        boost::python::converter::registry::push_back(
-                &functions::convertible, &functions::construct, boost::python::type_id<Target>(),
-                &boost::python::converter::expected_from_python_type_direct<Source>::get_pytype
-        );
+    template<class Source, class Target>
+    void implicitly_convertible_cast() {
+        static detail::implicitly_convertible_cast<Source, Target> _dummy;
     }
 }

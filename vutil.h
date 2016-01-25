@@ -115,6 +115,11 @@ namespace vstd {
         return unif()(rng());
     };
 
+    template<typename T=void>
+    int rand(int min, int max) {
+        return abs((unif()(rng()) + 0.5) * (max - min)) + min;
+    };
+
     template<typename T>
     static T *allocate(size_t size) {
         static boost::pool_allocator<T> _pool;
