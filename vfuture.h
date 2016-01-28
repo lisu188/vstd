@@ -179,8 +179,8 @@ namespace vstd {
             void call() {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
                 auto self = this->shared_from_this();
-                vstd::call(_caller, [self]() {
-                    self->setResult(vstd::call(self->_target, self->getArgument()));
+                vstd::functional::call(_caller, [self]() {
+                    self->setResult(vstd::functional::call(self->_target, self->getArgument()));
                 });
             }
 

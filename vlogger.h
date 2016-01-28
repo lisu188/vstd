@@ -4,13 +4,14 @@
 #include <sstream>
 #include <iostream>
 #include "vdefines.h"
+#include "vstring.h"
 
 namespace vstd {
     class logger {
         template<typename T, typename U, typename ...Args>
         static void log(T t, U u, Args... args) {
             std::stringstream stream;
-            stream << t << " " << u;
+            stream << vstd::str(t) << " " << u;
             log(stream.str(), args...);
         }
 

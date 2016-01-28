@@ -9,7 +9,7 @@ namespace vstd {
             template<typename thread_pool>
             void operator()(std::shared_ptr<thread_pool> pool, std::shared_ptr<worker_thread> self) {
                 do {
-                    pool->_queue.pop(vstd::call<std::function<void() >>);
+                    pool->_queue.pop(vstd::functional::call<std::function<void() >>);
                 } while (self.use_count() > 1);
             }
         };

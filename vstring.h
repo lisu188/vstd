@@ -13,6 +13,11 @@
 #include "vdefines.h"
 
 namespace vstd {
+    class stringable {
+    public:
+        virtual std::string to_string() = 0;
+    };
+
     template<typename T=void>
     std::string replace(std::string str, std::string from, std::string to) {
         size_t start_pos = str.find(from);
@@ -47,7 +52,13 @@ namespace vstd {
 
     template<typename T>
     std::string str(T c) {
-        return std::string(c);
+        std::stringstream st;
+        st << c;
+        return st.str();
+    }
+
+    std::string str(std::shared_ptr<stringable> c) {
+        return c->to_string();
     }
 
     template<typename T=void>
