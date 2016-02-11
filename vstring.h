@@ -57,6 +57,7 @@ namespace vstd {
         return st.str();
     }
 
+    template<typename T=void>
     std::string str(std::shared_ptr<stringable> c) {
         return c->to_string();
     }
