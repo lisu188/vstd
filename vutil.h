@@ -115,8 +115,8 @@ namespace vstd {
         return unif()(rng());
     };
 
-    template<typename T=void>
-    int rand(int min, int max) {
+    template<typename T,typename U>
+    int rand(T min, U max) {
         return abs((unif()(rng()) + 0.5) * (max - min)) + min;
     };
 
