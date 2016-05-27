@@ -18,6 +18,16 @@ namespace vstd {
         return container.find(value) != container.end();
     }
 
+    template<typename Container, typename Value, typename Comparator>
+    bool ctn(Container &container, Value value, Comparator cmp) {
+        for (auto x:container) {
+            if (cmp(value, x)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     template<typename T, typename U>
     bool castable(std::shared_ptr<U> ptr) {
         return std::dynamic_pointer_cast<T>(ptr).operator bool();
@@ -100,7 +110,7 @@ namespace vstd {
 
     template<typename T=void>
     std::mt19937_64 &rng() {
-        static std::mt19937_64 rng;
+        static std::mt19937_64 rng((unsigned long) std::time(nullptr));
         return rng;
     }
 
