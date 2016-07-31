@@ -118,6 +118,14 @@ namespace vstd {
                         boost::python::type_id<std::function<Return(Args...) >>());
             }
         };
+
+        template<typename T>
+        struct register_pointer {
+            register_pointer() {
+                boost::python::register_ptr_to_python<std::shared_ptr<T> >();
+            }
+        };
+
     }
 
     template<typename Return, typename... Args>
@@ -127,7 +135,13 @@ namespace vstd {
         }
     };
 
+    template<typename T>
+    void register_pointer() {
+        static detail::register_pointer<T> _dummy;
+    }
+
     namespace detail {
+
         template<class Source, class Target>
         struct implicitly_convertible_cast {
             implicitly_convertible_cast(boost::type<Source> * = 0, boost::type<Target> * = 0) {

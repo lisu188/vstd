@@ -65,6 +65,15 @@ namespace vstd {
             tests.push_back(std::make_pair(vstd::as_array(in), vstd::as_array(out)));
         }
 
+        int teach(double erms, int step = 1) {
+            int i = 0;
+            while (this->erms() > erms) {
+                teach(step);
+                i += step;
+            }
+            return i;
+        }
+
         void teach(int ite) {
             if (teachers.size() != 0) {
                 while (ite-- > 0) {
