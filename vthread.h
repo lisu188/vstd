@@ -14,6 +14,10 @@ namespace vstd {
 
     extern std::function<void(std::function<bool()>)> get_wait_until_handler();
 
+    extern std::function<void(int, std::function<void()>)> get_call_delayed_async_handler();
+
+    extern std::function<void(int, std::function<void()>)> get_call_delayed_later_handler();
+
     template<typename Function, typename... Arguments>
     void call_later(Function target, Arguments... args) {
         get_call_later_handler()(vstd::bind(target, args...));
@@ -42,5 +46,15 @@ namespace vstd {
             wait_until(pred);
             call_later(bind);
         });
+    }
+
+    template<typename Function, typename... Arguments>
+    void call_delayed_async(int millis, Function target, Arguments... args) {
+        get_call_delayed_async_handler()(millis, vstd::bind(target, args...));
+    }
+
+    template<typename Function, typename... Arguments>
+    void call_delayed_later(int millis, Function target, Arguments... args) {
+        get_call_delayed_later_handler()(millis, vstd::bind(target, args...));
     }
 }
