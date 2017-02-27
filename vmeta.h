@@ -165,6 +165,10 @@ namespace vstd {
             return _name;
         }
 
+        bool inherits(std::string clas) {
+            return name() == clas || (super() && super()->inherits(clas));
+        }
+
         template<typename ObjectType, typename PropertyType>
         void set_property(std::string prop, std::shared_ptr<ObjectType> t, PropertyType p) {
             _get_property_object<ObjectType, PropertyType>(t, prop)->set(boost::any(t), boost::any(p));
