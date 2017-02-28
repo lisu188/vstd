@@ -74,7 +74,7 @@ namespace vstd {
     template<typename T=void>
     std::string join(std::list<std::string> list, std::string sep) {
         std::stringstream stream;
-        int i = 0;
+        unsigned int i = 0;
         for (std::string str:list) {
             stream << str;
             if (i++ != list.size() - 1) {
