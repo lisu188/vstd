@@ -18,6 +18,7 @@
 #include "vmeta.h"
 #include "vneuro.h"
 #include "vany.h"
+#include "vcache.h"
 
 #ifdef Py_PYTHON_H
 #include "vconverter.h"
