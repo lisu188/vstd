@@ -44,9 +44,10 @@ namespace vstd {
     namespace detail {
         template<typename ObjectType, typename PropertyType>
         class property_impl : public property {
+            std::string _name;
             std::function<PropertyType(ObjectType *)> _getter;
             std::function<void(ObjectType *, PropertyType)> _setter;
-            std::string _name;
+
         public:
             template<typename Getter, typename Setter>
             property_impl(std::string name, Getter getter, Setter setter) :
