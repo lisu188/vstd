@@ -23,10 +23,10 @@ namespace vstd {
         };
 
         template<size_t i>
-        void args(typename vstd::enable_if<i == 0>::type * = 0) { }
+        void args(typename vstd::enable_if<i == 0>::type * = 0) {}
 
         template<size_t i, typename... Args>
-        typename std::tuple_element<i, std::tuple < Args...>>
+        typename std::tuple_element<i, std::tuple<Args...>>
 
         ::type
         args(typename vstd::disable_if<sizeof... (Args) == 0>::type * = 0) {

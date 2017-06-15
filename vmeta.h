@@ -207,9 +207,9 @@ namespace vstd {
             props.insert(vals.begin(), vals.end());
             vals = ob->dynamic_props() | boost::adaptors::map_values;
             props.insert(vals.begin(), vals.end());
-            if(auto _super=super()){
-                auto _props=_super->properties(ob);
-                props.insert(_props.begin(),_props.end());
+            if (auto _super = super()) {
+                auto _props = _super->properties(ob);
+                props.insert(_props.begin(), _props.end());
             }
             return props;
         }
