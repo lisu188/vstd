@@ -14,7 +14,6 @@
 private: \
 friend class vstd::meta; \
 std::unordered_map<std::string, std::shared_ptr<vstd::property>> _dynamic_props; \
-std::shared_ptr<vstd::meta> _meta=static_meta(); \
 virtual std::unordered_map<std::string, std::shared_ptr<vstd::property>> &dynamic_props(){return _dynamic_props;} \
 public: \
 static std::shared_ptr<vstd::meta> static_meta(){ \
@@ -23,7 +22,7 @@ static std::shared_ptr<vstd::meta> static_meta(){ \
     return _static_meta; \
 } \
 virtual std::shared_ptr<vstd::meta> meta() { \
-    return _meta; \
+    return static_meta(); \
 } \
 private: \
 
