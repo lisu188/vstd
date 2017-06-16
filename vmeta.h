@@ -14,14 +14,16 @@
 private: \
 friend class vstd::meta; \
 std::unordered_map<std::string, std::shared_ptr<vstd::property>> _dynamic_props; \
+std::shared_ptr<vstd::meta> _meta=static_meta(); \
 virtual std::unordered_map<std::string, std::shared_ptr<vstd::property>> &dynamic_props(){return _dynamic_props;} \
 public: \
 static std::shared_ptr<vstd::meta> static_meta(){ \
-    static std::shared_ptr<vstd::meta> _meta=std::make_shared<vstd::meta>(V_STRING(CLASS),SUPER::static_meta(),__VA_ARGS__); \
-    return _meta; \
+    static std::shared_ptr<vstd::meta> _static_meta=std::make_shared<vstd::meta>(V_STRING(CLASS),SUPER::static_meta(),__VA_ARGS__); \
+    if(!vstd::ctn(*vstd::meta::index(),_static_meta->name())){vstd::meta::index()->insert(std::make_pair(_static_meta->name(),_static_meta));} \
+    return _static_meta; \
 } \
-virtual std::shared_ptr<vstd::meta> meta() const{ \
-    return static_meta(); \
+virtual std::shared_ptr<vstd::meta> meta() { \
+    return _meta; \
 } \
 private: \
 
@@ -117,6 +119,10 @@ namespace vstd {
             }
         };
 
+        static std::unordered_map<std::string, std::shared_ptr<meta>> *index() {
+            static std::unordered_map<std::string, std::shared_ptr<meta>> _index;
+            return &_index;
+        };
     private:
         std::string _name;
         std::unordered_map<std::string, std::shared_ptr<property>> _props;
