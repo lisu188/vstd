@@ -23,5 +23,6 @@ namespace vstd {
             return t;
         }
         fail(args...);
+        return t;
     }
 }
