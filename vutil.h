@@ -29,6 +29,12 @@ namespace vstd {
         return false;
     }
 
+    template<typename Container>
+    auto get(Container &container, int index) {
+        return *std::next(container.begin(), index);
+    }
+
+
     template<typename T, typename U>
     bool castable(std::shared_ptr<U> ptr) {
         return std::dynamic_pointer_cast<T>(ptr).operator bool();
