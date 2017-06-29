@@ -31,9 +31,28 @@ namespace vstd {
 
         template<typename Ctn, typename Func>
         void map(Ctn ctn, Func f) {
-            for (typename function_traits<Func>::return_type val:ctn) {
-                call(f, val);
+            for (auto val:ctn) {
+                f(val);
             }
+        }
+
+        template<typename T, typename Ctn, typename Func>
+        T sum(Ctn ctn, Func f) {
+            T s = 0;
+            for (auto val:ctn) {
+                s += f(val);
+            }
+            return s;
+        }
+
+
+        template<typename T, typename Ctn>
+        T sum(Ctn ctn) {
+            T s = 0;
+            for (auto val:ctn) {
+                s += val;
+            }
+            return s;
         }
     }
 }
