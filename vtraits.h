@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include "vstd.h"
+#include "vtuple.h"
 
 namespace vstd {
     template<bool B, typename T = void> using enable_if = std::enable_if<B, T>;
@@ -26,7 +28,7 @@ namespace vstd {
         void args(typename vstd::enable_if<i == 0>::type * = 0) {}
 
         template<size_t i, typename... Args>
-        typename std::tuple_element<i, std::tuple<Args...>>
+        typename vstd::tuple_element<i, Args...>
 
         ::type
         args(typename vstd::disable_if<sizeof... (Args) == 0>::type * = 0) {

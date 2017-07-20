@@ -19,6 +19,7 @@
 #include "vneuro.h"
 #include "vany.h"
 #include "vcache.h"
+#include "vtuple.h"
 
 #ifdef Py_PYTHON_H
 
