@@ -155,4 +155,12 @@ namespace vstd {
         std::copy(std::begin(vec), std::end(vec), ret);
         return ret;
     }
+
+    //TODO: handle return types
+    template<typename T, typename C>
+    static void if_not_null(T object, C callback) {
+        if (object) {
+            callback(object);
+        }
+    }
 }
