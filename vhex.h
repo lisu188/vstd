@@ -21,8 +21,8 @@ namespace vstd {
         return to_hex<U *>(object.get());
     }
 
-    template<typename U>
-    std::string to_hex_hash(U object) {
-        return to_hex<std::size_t>(hash_combine(object));
+    template<typename... Args>
+    std::string to_hex_hash(Args... args) {
+        return to_hex<std::size_t>(hash_combine(args...));
     }
 }

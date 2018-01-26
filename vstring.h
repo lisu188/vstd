@@ -65,7 +65,12 @@ namespace vstd {
     template<typename T=void>
     std::pair<int, bool> to_int(std::string s) {
         try {
-            return std::make_pair(std::stoi(s), true);
+            size_t result;
+            int value = std::stoi(s, &result);
+            if (result != s.size()) {
+                return std::make_pair(value, false);
+            }
+            return std::make_pair(value, true);
         } catch (...) {
             return std::make_pair(0, false);
         }
