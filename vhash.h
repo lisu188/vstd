@@ -58,6 +58,13 @@ namespace std {
     };
 
     template<>
+    struct hash<std::pair<std::string, int>> {
+        std::size_t operator()(const std::pair<std::string, int> &pair) const {
+            return vstd::hash_combine(pair.first, pair.second);
+        }
+    };
+
+    template<>
     struct hash<std::pair<std::string, std::string>> {
         std::size_t operator()(const std::pair<std::string, std::string> &pair) const {
             return vstd::hash_combine(pair.first, pair.second);
