@@ -15,6 +15,8 @@ private: \
 friend class vstd::meta; \
 std::unordered_map<std::string, std::shared_ptr<vstd::property>> _dynamic_props; \
 virtual std::unordered_map<std::string, std::shared_ptr<vstd::property>> &dynamic_props(){return _dynamic_props;} \
+std::unordered_map<std::string, std::shared_ptr<vstd::method>> _dynamic_methods; \
+virtual std::unordered_map<std::string, std::shared_ptr<vstd::method>> &dynamic_methods(){return _dynamic_methods;} \
 public: \
 static std::shared_ptr<vstd::meta> static_meta(){ \
     static std::shared_ptr<vstd::meta> _static_meta=std::make_shared<vstd::meta>(V_STRING(CLASS),SUPER::static_meta(),__VA_ARGS__); \
@@ -27,8 +29,23 @@ virtual std::shared_ptr<vstd::meta> meta() { \
 private: \
 
 #define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER) std::make_shared<vstd::detail::property_impl<CLASS,TYPE>>(V_STRING(NAME),&CLASS::GETTER,&CLASS::SETTER)
+#define V_METHOD(CLASS, NAME, RET_TYPE, ...) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE,__VA_ARGS__>>(V_STRING(NAME),&CLASS::NAME)
 
 namespace vstd {
+    //TODO: allow method overrides, use composite key in _methods in meta
+    class method {
+    public:
+        virtual std::string name() = 0;
+
+        virtual boost::any invoke(boost::any object) = 0;
+
+        virtual boost::typeindex::type_index object_type() = 0;
+
+        virtual boost::typeindex::type_index return_type() = 0;
+
+        virtual std::list<boost::typeindex::type_index> argument_types() = 0;
+    };
+
     class property {
     public:
         virtual std::string name() = 0;
@@ -43,6 +60,49 @@ namespace vstd {
     };
 
     namespace detail {
+        template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes>
+        class method_impl : public method {
+            std::string _name;
+            std::function<ReturnType(ObjectType *, ArgumentTypes...)> _func;
+
+        public:
+            template<typename Method>
+            method_impl(std::string name, Method method) :
+                    _name(name), _func(std::mem_fn(method)) {
+
+            }
+
+            std::string name() override {
+                return _name;
+            }
+
+            boost::typeindex::type_index object_type() override {
+                return boost::typeindex::type_id<ObjectType>();
+            }
+
+            boost::typeindex::type_index return_type() override {
+                return boost::typeindex::type_id<ReturnType>();
+            }
+
+            std::list<boost::typeindex::type_index> argument_types() override {
+                return _argument_types();
+            }
+
+            std::list<boost::typeindex::type_index> _argument_types() {
+                return std::list<boost::typeindex::type_index>();
+            }
+
+            template<typename Arg, typename... Args>
+            std::list<boost::typeindex::type_index> argument_types(Arg arg, Args... props) {
+                std::list<boost::typeindex::type_index> ret;
+                ret.insert(boost::typeindex::type_id<Arg>());
+                for (boost::typeindex::type_index ind:argument_types<Args...>()) {
+                    ret.push_back(ind);
+                }
+                return ret;
+            };
+        };
+
         template<typename ObjectType, typename PropertyType>
         class property_impl : public property {
             std::string _name;
@@ -125,6 +185,7 @@ namespace vstd {
     private:
         std::string _name;
         std::unordered_map<std::string, std::shared_ptr<property>> _props;
+        std::unordered_map<std::string, std::shared_ptr<method>> _methods;
         std::shared_ptr<meta> _super;
 
 
@@ -135,6 +196,12 @@ namespace vstd {
         template<typename... Args>
         void _add(std::shared_ptr<property> prop, Args... props) {
             _props[prop->name()] = prop;
+            _add(props...);
+        };
+
+        template<typename... Args>
+        void _add(std::shared_ptr<method> meth, Args... props) {
+            _methods[meth->name()] = meth;
             _add(props...);
         };
 
