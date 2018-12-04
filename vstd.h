@@ -21,6 +21,12 @@
 #include "vcache.h"
 #include "vtuple.h"
 
+#ifdef SDL_h_
+
+#include "veventloop.h"
+
+#endif
+
 #ifdef Py_PYTHON_H
 
 #include "vconverter.h"
