@@ -5,13 +5,13 @@
 
 namespace vstd {
     namespace detail {
-        template<typename Return, typename... Args>
+        template<typename Ret, typename... Args>
         struct builder {
             static void build(PyObject *obj_ptr, boost::python::converter::rvalue_from_python_stage1_data *data) {
                 help(obj_ptr, data);
             }
 
-            template<typename R=Return>
+            template<typename R=Ret>
             static void help(PyObject *obj_ptr,
                              boost::python::converter::rvalue_from_python_stage1_data *data,
                              typename vstd::disable_if<vstd::is_shared_ptr<R>::value>::type * = 0) {
@@ -28,7 +28,7 @@ namespace vstd {
                 data->convertible = storage;
             }
 
-            template<typename R=Return>
+            template<typename R=Ret>
             static void help(PyObject *obj_ptr,
                              boost::python::converter::rvalue_from_python_stage1_data *data,
                              typename vstd::enable_if<vstd::is_shared_ptr<R>::value>::type * = 0) {
@@ -106,7 +106,7 @@ namespace vstd {
     }
 
     namespace detail {
-        template<typename Return, typename... Args>
+        template<typename Ret, typename... Args>
         struct function_converter {
             function_converter() {
                 boost::python::converter::registry::push_back(
@@ -114,8 +114,8 @@ namespace vstd {
                             if (PyCallable_Check(obj_ptr)) { return obj_ptr; }
                             return nullptr;
                         },
-                        detail::builder<Return, Args...>::build,
-                        boost::python::type_id<std::function<Return(Args...) >>());
+                        detail::builder<Ret, Args...>::build,
+                        boost::python::type_id<std::function<Ret(Args...) >>());
             }
         };
 
@@ -128,10 +128,10 @@ namespace vstd {
 
     }
 
-    template<typename Return, typename... Args>
+    template<typename Ret, typename... Args>
     struct function_converter {
         function_converter() {
-            static detail::function_converter<Return, Args...> _dummy;
+            static detail::function_converter<Ret, Args...> _dummy;
         }
     };
 
