@@ -29,6 +29,16 @@ namespace vstd {
         return false;
     }
 
+    template<typename Container, typename Value, typename Comparator>
+    void erase(Container &container, Value value, Comparator cmp) {
+        for (auto it = container.begin(); it != container.end(); it++) {
+            if (cmp(value, *it)) {
+                container.erase(it);
+                break;
+            }
+        }
+    }
+
     template<typename Container>
     auto get(Container &container, int index) {
         return *std::next(container.begin(), index);
