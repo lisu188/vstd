@@ -28,8 +28,39 @@ virtual std::shared_ptr<vstd::meta> meta() { \
 } \
 private: \
 
+// get number of arguments with __NARG__
+#define __NARG__(...)  __NARG_I_(__VA_ARGS__,__RSEQ_N())
+#define __NARG_I_(...) __ARG_N(__VA_ARGS__)
+#define __ARG_N(\
+      _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, \
+     _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, \
+     _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, \
+     _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, \
+     _41, _42, _43, _44, _45, _46, _47, _48, _49, _50, \
+     _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, \
+     _61, _62, _63, N, ...) N
+#define __RSEQ_N() \
+     63,62,61,60,                   \
+     59,58,57,56,55,54,53,52,51,50, \
+     49,48,47,46,45,44,43,42,41,40, \
+     39,38,37,36,35,34,33,32,31,30, \
+     29,28,27,26,25,24,23,22,21,20, \
+     19,18,17,16,15,14,13,12,11,10, \
+     9,8,7,6,5,4,3,2,1,0
+
+// general definition for any function name
+#define _VFUNC_(name, n) name##n
+#define _VFUNC(name, n) _VFUNC_(name, n)
+#define VFUNC(func, ...) _VFUNC(func, __NARG__(__VA_ARGS__)) (__VA_ARGS__)
+
+// definition for FOO
+#define V_METHOD(...) VFUNC(V_METHOD, __VA_ARGS__)
+
 #define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER) std::make_shared<vstd::detail::property_impl<CLASS,TYPE>>(V_STRING(NAME),&CLASS::GETTER,&CLASS::SETTER)
-#define V_METHOD(CLASS, NAME, RET_TYPE, ...) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE,__VA_ARGS__>>(V_STRING(NAME),&CLASS::NAME)
+
+#define V_METHOD2(CLASS, NAME) std::make_shared<vstd::detail::method_impl<CLASS,void>>(V_STRING(NAME),&CLASS::NAME)
+#define V_METHOD3(CLASS, NAME, RET_TYPE) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE>>(V_STRING(NAME),&CLASS::NAME)
+#define V_METHOD4(CLASS, NAME, RET_TYPE, ...) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE,__VA_ARGS__>>(V_STRING(NAME),&CLASS::NAME)
 
 namespace vstd {
     //TODO: allow method overrides, use composite key in _methods in meta
@@ -37,7 +68,7 @@ namespace vstd {
     public:
         virtual std::string name() = 0;
 
-        virtual boost::any invoke(boost::any object) = 0;
+        virtual boost::any invoke(boost::any args...) = 0;
 
         virtual boost::typeindex::type_index object_type() = 0;
 
@@ -71,6 +102,55 @@ namespace vstd {
                     _name(name), _func(std::mem_fn(method)) {
 
             }
+
+            template<typename T=ReturnType>
+            method_impl(std::string name,
+                        typename vstd::disable_if<vstd::is_same<T, void>::value>::type * = 0) :
+                    _name(name), _func([](ObjectType *, ArgumentTypes...) {
+                return ReturnType();
+            }) {
+            }
+
+            template<typename T=ReturnType>
+            method_impl(std::string name,
+                        typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) :
+                    _name(name), _func([](ObjectType *, ArgumentTypes...) {
+
+            }) {
+            }
+
+            //TODO: implement arguments and return type
+            boost::any invoke(boost::any args...) override {
+                return _invoke(args);
+            }
+
+
+            template<typename T=ReturnType>
+            boost::any _invoke(std::initializer_list<boost::any> args,
+                               typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) {
+                _func(vstd::any_cast<std::shared_ptr<ObjectType >>(*args.begin()).get());
+                return boost::any();
+            }
+
+            template<typename T=ReturnType>
+            boost::any _invoke(std::initializer_list<boost::any> args,
+                               typename vstd::disable_if<vstd::is_same<T, void>::value>::type * = 0) {
+                return boost::any(_func(vstd::any_cast<std::shared_ptr<ObjectType >>(*args.begin()).get()));
+            }
+
+            template<typename T=ReturnType>
+            boost::any _invoke(boost::any arg,
+                               typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) {
+                _func(vstd::any_cast<std::shared_ptr<ObjectType >>(arg).get());
+                return boost::any();
+            }
+
+            template<typename T=ReturnType>
+            boost::any _invoke(boost::any arg,
+                               typename vstd::disable_if<vstd::is_same<T, void>::value>::type * = 0) {
+                return boost::any(_func(vstd::any_cast<std::shared_ptr<ObjectType >>(arg).get()));
+            }
+
 
             std::string name() override {
                 return _name;
@@ -220,8 +300,20 @@ namespace vstd {
                                               : nullptr) {
                 return super_p;
             }
-            ob->dynamic_props()[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(name);
+            ob->dynamic_props()[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(
+                    name);
             return _get_property_object<ObjectType, PropertyType>(ob, name);
+        }
+
+        template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes>
+        std::shared_ptr<method> _get_method_object(std::string name) {
+            if (vstd::ctn(_methods, name)) {
+                return _methods[name];
+            } else if (auto super_p = super() ? super()->_get_method_object<ObjectType,
+                    ReturnType, ArgumentTypes...>(name) : nullptr) {
+                return super_p;
+            }
+            return std::make_shared<vstd::detail::method_impl<ObjectType, ReturnType, ArgumentTypes...>>(name);
         }
 
     public:
@@ -244,20 +336,33 @@ namespace vstd {
 
         template<typename ObjectType, typename PropertyType>
         void set_property(std::string prop, std::shared_ptr<ObjectType> t, PropertyType p) {
-            _get_property_object<ObjectType, PropertyType>(t, prop)->set(boost::any(t), boost::any(p));
+            _get_property_object<ObjectType, PropertyType>(t, prop)->set(t, p);
+        }
+
+        template<typename ReturnType, typename ObjectType, typename ...ArgumentTypes>
+        void invoke_method(std::string name, std::shared_ptr<ObjectType> t, ArgumentTypes... args,
+                           typename vstd::enable_if<std::is_same<ReturnType, void>::value>::type * = 0) {
+            _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(name)->invoke(t, args...);
+        }
+
+        template<typename ReturnType, typename ObjectType, typename ...ArgumentTypes>
+        ReturnType invoke_method(std::string name, std::shared_ptr<ObjectType> t, ArgumentTypes... args,
+                                 typename vstd::disable_if<std::is_same<ReturnType, void>::value>::type * = 0) {
+            return vstd::any_cast<ReturnType>(
+                    _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(name)->invoke(t, args...));
         }
 
         template<typename ObjectType, typename PropertyType>
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
                                   typename vstd::disable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
             return vstd::any_cast<PropertyType>(
-                    _get_property_object<ObjectType, PropertyType>(t, prop)->get(boost::any(t)));
+                    _get_property_object<ObjectType, PropertyType>(t, prop)->get(t));
         }
 
         template<typename ObjectType, typename PropertyType>
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
                                   typename vstd::enable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
-            return _get_property_object<ObjectType, PropertyType>(t, prop)->get(boost::any(t));
+            return _get_property_object<ObjectType, PropertyType>(t, prop)->get(t);
         }
 
         template<typename ObjectType>
@@ -285,6 +390,8 @@ namespace vstd {
             }
             return props;
         }
+
+
     };
 
 
