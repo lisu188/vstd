@@ -7,8 +7,8 @@ generic object type any utilities over boost:any
 ## vfunctional
 functional programming utilities
 ## vlazy
-Lazy initialization template
+lazy initialization template
 ## vlogger
-Simple logger for c++
+simple logger for c++
 ## vmeta
-Meta object and reflection system for c++
+meta object and reflection system for c++
