@@ -39,4 +39,4 @@ void vmeta_example() {
     vstd::logger::info("Meta access:",
                        CMetaExample::static_meta()->get_property<CMetaExample, std::string>("text", example));
 }
-</re>
+</pre>
