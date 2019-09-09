@@ -23,6 +23,10 @@ namespace vstd {
             return ptr = f();
         }
 
+        void clear() {
+            ptr = nullptr;
+        }
+
     private :
         std::shared_ptr<T> ptr;
     };
