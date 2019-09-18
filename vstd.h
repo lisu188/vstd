@@ -31,6 +31,7 @@
 #include "vany.h"
 #include "vcache.h"
 #include "vtuple.h"
+#include "vbind.h"
 
 #ifdef SDL_h_
 
