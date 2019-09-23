@@ -111,6 +111,13 @@ namespace vstd {
             std::function<ReturnType(ObjectType *, ArgumentTypes...)> _func;
 
         public:
+
+            template<typename Method>
+            method_impl(std::string name, Method method, bool external):
+                    _name(name), _func(method) {
+
+            }
+
             template<typename Method>
             method_impl(std::string name, Method method) :
                     _name(name), _func(std::mem_fn(method)) {
@@ -168,8 +175,8 @@ namespace vstd {
             template<int argNo, typename F>
             auto _bind(F function, boost::any arg, typename vstd::disable_if<argNo == 0>::type * = 0) {
                 return vstd::partial::bind(function,
-                                  vstd::any_cast<typename vstd::tuple_element<argNo, ObjectType, ArgumentTypes...>::type>(
-                                          arg));
+                                           vstd::any_cast<typename vstd::tuple_element<argNo, ObjectType, ArgumentTypes...>::type>(
+                                                   arg));
             }
 
             template<int argNo, typename F>
@@ -332,14 +339,25 @@ namespace vstd {
         }
 
         template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes>
-        std::shared_ptr<method> _get_method_object(std::string name) {
+        std::shared_ptr<method> _get_method_object(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_methods, name)) {
                 return _methods[name];
+            } else if (vstd::ctn(ob->dynamic_methods(), name)) {
+                return ob->dynamic_methods()[name];
             } else if (auto super_p = super() ? super()->_get_method_object<ObjectType,
-                    ReturnType, ArgumentTypes...>(name) : nullptr) {
+                    ReturnType, ArgumentTypes...>(ob, name) : nullptr) {
                 return super_p;
             }
+            //TODO: handle differently
             return std::make_shared<vstd::detail::method_impl<ObjectType, ReturnType, ArgumentTypes...>>(name);
+        }
+
+        template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes, typename Function>
+        void _set_method_object(std::shared_ptr<ObjectType> ob, std::string name, Function function) {
+            ob->dynamic_methods()[name] = std::make_shared<vstd::detail::method_impl<ObjectType, ReturnType, ArgumentTypes...>>(
+                    name,
+                    function,
+                    true);
         }
 
     public:
@@ -368,14 +386,14 @@ namespace vstd {
         template<typename ReturnType, typename ObjectType, typename ...ArgumentTypes>
         void invoke_method(std::string name, std::shared_ptr<ObjectType> t, ArgumentTypes... args,
                            typename vstd::enable_if<std::is_same<ReturnType, void>::value>::type * = 0) {
-            _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(name)->invoke({t, args...});
+            _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(t, name)->invoke({t, args...});
         }
 
         template<typename ReturnType, typename ObjectType, typename ...ArgumentTypes>
         ReturnType invoke_method(std::string name, std::shared_ptr<ObjectType> t, ArgumentTypes... args,
                                  typename vstd::disable_if<std::is_same<ReturnType, void>::value>::type * = 0) {
             return vstd::any_cast<ReturnType>(
-                    _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(name)->invoke({t, args...}));
+                    _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(t, name)->invoke({t, args...}));
         }
 
         template<typename ObjectType, typename PropertyType>
@@ -389,6 +407,11 @@ namespace vstd {
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
                                   typename vstd::enable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
             return _get_property_object<ObjectType, PropertyType>(t, prop)->get(t);
+        }
+
+        template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes, typename Function>
+        void set_method(std::string method, std::shared_ptr<ObjectType> t, Function function) {
+            _set_method_object<ObjectType, ReturnType, ArgumentTypes...>(t, method, function);
         }
 
         template<typename ObjectType>
