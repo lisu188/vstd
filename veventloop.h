@@ -29,7 +29,7 @@ namespace vstd {
                 std::vector<std::pair<int, std::function<void()>>>,
                 DelayCompare> delayQueue;
         std::list<std::function<void(int)>> frameCallbackList;
-        std::list<std::function<void(SDL_Event * )>> eventCallbackList;
+        std::list<std::function<bool(SDL_Event *)>> eventCallbackList;
     public:
         static std::shared_ptr<event_loop> instance() {
             static std::shared_ptr<vstd::event_loop<>> _loop = std::make_shared<vstd::event_loop<>>();
@@ -76,7 +76,7 @@ namespace vstd {
             frameCallbackList.push_back(f);
         }
 
-        void registerEventCallback(std::function<void(SDL_Event * )> f) {
+        void registerEventCallback(std::function<bool(SDL_Event *)> f) {
             eventCallbackList.push_back(f);
         }
 
@@ -89,7 +89,9 @@ namespace vstd {
                     return false;
                 }
                 for (auto cm:eventCallbackList) {
-                    cm(&event);
+                    if (cm(&event)) {
+                        break;
+                    }
                 }
             }
 
@@ -124,7 +126,9 @@ namespace vstd {
                 if (event->type == _call_function_event) {
                     static_cast<std::function<void()> *>(event->user.data1)->operator()();
                     delete static_cast<std::function<void()> *>(event->user.data1);
+                    return true;
                 }
+                return false;
             });
         }
 
