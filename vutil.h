@@ -91,6 +91,15 @@ namespace vstd {
         return x;
     }
 
+    template<typename T>
+    class list : public std::list<T> {
+    public:
+        template<typename U>
+        void insert(U u) {
+            this->push_back(u);
+        }
+    };
+
     template<typename F,
             typename ret=typename vstd::function_traits<F>::return_type,
             typename arg=typename vstd::function_traits<F>::template arg<0>::type>
@@ -107,7 +116,7 @@ namespace vstd {
         return std::function<ret()>(f);
     }
 
-    //TODO: use somewhere std::priority_queue<T,std::vector<T>,std::function<bool ( T,T ) >>
+//TODO: use somewhere std::priority_queue<T,std::vector<T>,std::function<bool ( T,T ) >>
     template<typename T, typename Queue=std::queue<T>>
     class blocking_queue {
     private:
@@ -177,11 +186,12 @@ namespace vstd {
         return ret;
     }
 
-    //TODO: handle return types
+//TODO: handle return types
     template<typename T, typename C>
     static void if_not_null(T object, C callback) {
         if (object) {
             callback(object);
         }
     }
+
 }
