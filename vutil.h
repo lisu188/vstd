@@ -40,6 +40,11 @@ namespace vstd {
         return false;
     }
 
+    template<typename Container, typename Predicate>
+    auto find_if(Container &container, Predicate predicate) {
+        return *std::find_if(container.begin(), container.end(), predicate);
+    }
+
     template<typename Container, typename Value, typename Comparator>
     void erase(Container &container, Value value, Comparator cmp) {
         for (auto it = container.begin(); it != container.end(); it++) {
