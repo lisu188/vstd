@@ -45,6 +45,14 @@ namespace vstd {
         return *std::find_if(container.begin(), container.end(), predicate);
     }
 
+    template<typename Container, typename Predicate,typename Callback>
+    auto execute_if(Container &container, Predicate predicate,Callback callback) {
+        if(std::find_if(container.begin(), container.end(), predicate)!=container.end()){
+            callback(*std::find_if(container.begin(), container.end(), predicate));
+        }
+    }
+
+
     template<typename Container, typename Value, typename Comparator>
     void erase(Container &container, Value value, Comparator cmp) {
         for (auto it = container.begin(); it != container.end(); it++) {
@@ -74,6 +82,11 @@ namespace vstd {
     template<typename F, typename... Args>
     std::function<typename function_traits<F>::return_type()> bind(F f, Args... args) {
         return std::bind(f, args...);
+    }
+
+    template<typename F, typename... Args>
+    std::function<typename function_traits<F>::return_type()> bind(F f) {
+        return f;
     }
 
     template<typename Range, typename Value=typename range_traits<Range>::value_type>
