@@ -45,9 +45,9 @@ namespace vstd {
         return *std::find_if(container.begin(), container.end(), predicate);
     }
 
-    template<typename Container, typename Predicate,typename Callback>
-    auto execute_if(Container &container, Predicate predicate,Callback callback) {
-        if(std::find_if(container.begin(), container.end(), predicate)!=container.end()){
+    template<typename Container, typename Predicate, typename Callback>
+    auto execute_if(Container &container, Predicate predicate, Callback callback) {
+        if (std::find_if(container.begin(), container.end(), predicate) != container.end()) {
             callback(*std::find_if(container.begin(), container.end(), predicate));
         }
     }
@@ -210,6 +210,11 @@ namespace vstd {
         if (object) {
             callback(object);
         }
+    }
+
+    template<typename T>
+    static double percent(T object, double percent) {
+        return object * (percent / 100.0);
     }
 
 }
