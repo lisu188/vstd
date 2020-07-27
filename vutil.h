@@ -217,4 +217,18 @@ namespace vstd {
         return object * (percent / 100.0);
     }
 
+    template<typename R, typename T, typename F>
+    R with(T t, F f, typename vstd::enable_if<std::is_void<R>::value>::type * = 0) {
+        if (t) {
+            f(t);
+        }
+    };
+
+    template<typename R, typename T, typename F>
+    R with(T t, F f, typename vstd::disable_if<std::is_void<R>::value>::type * = 0) {
+        if (t) {
+            return f(t);
+        }
+        return R();
+    }
 }
