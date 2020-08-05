@@ -87,8 +87,8 @@ namespace vstd {
         }
     };
 
-    template<typename T=void>
-    std::string join(std::list<std::string> list, std::string sep) {
+    template<typename Ctn=std::list<std::string>>
+    std::string join(Ctn list, std::string sep) {
         std::stringstream stream;
         unsigned int i = 0;
         for (std::string str:list) {

@@ -30,18 +30,17 @@ namespace vstd {
             f(args...);
         }
 
-        template<typename Ctn, typename Func>
-        std::set<typename function_traits<Func>::return_type> map(Ctn ctn, Func f) {
-            typedef typename function_traits<Func>::return_type Return;
-            std::set<Return> ret;
+        template<typename Return, typename Ctn, typename Func>
+        Return map(Ctn ctn, Func f) {
+            Return ret;
             for (typename Ctn::value_type val:ctn) {
-                ret.insert(call<Return>(f, val));
+                ret.insert(f(val));
             }
             return ret;
         }
 
         template<typename Ctn, typename Func>
-        void map(Ctn ctn, Func f) {
+        void foreach(Ctn ctn, Func f) {
             for (auto val:ctn) {
                 f(val);
             }
