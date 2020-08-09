@@ -440,8 +440,12 @@ namespace vstd {
             return props;
         }
 
-
+        template<typename ObjectType>
+        bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
+            auto props = properties(ob);
+            return vstd::ctn_pred(props, [=](auto prop) {
+                return prop->name() == name;
+            });
+        }
     };
-
-
 }

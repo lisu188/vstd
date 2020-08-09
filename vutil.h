@@ -41,6 +41,11 @@ namespace vstd {
     }
 
     template<typename Container, typename Predicate>
+    bool ctn_pred(Container &container, Predicate pred) {
+        return std::find_if(container.begin(), container.end(), pred) != container.end();
+    }
+
+    template<typename Container, typename Predicate>
     auto find_if(Container &container, Predicate predicate) {
         return *std::find_if(container.begin(), container.end(), predicate);
     }
@@ -91,7 +96,6 @@ namespace vstd {
 
     template<typename Range, typename Value=typename range_traits<Range>::value_type>
     std::set<Value> collect(Range r) {
-
         return cast<std::set<Value>>(r);
     }
 
