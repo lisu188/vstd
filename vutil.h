@@ -235,4 +235,14 @@ namespace vstd {
         }
         return R();
     }
+
+    template<typename A>
+    bool all_equals(A) {
+        return true;
+    }
+
+    template<typename A, typename B, typename...Args>
+    bool all_equals(A a, B b, Args... args) {
+        return a == b && all_equals(a, args...) && all_equals(b, args...);
+    }
 }
