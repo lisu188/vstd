@@ -25,6 +25,11 @@
 #include "vcast.h"
 
 namespace vstd {
+    template<typename Container>
+    auto any(Container &container) {
+        return *std::find_if(container.begin(), container.end(), [](auto it) { return true; });
+    }
+
     template<typename Container, typename Value>
     bool ctn(Container &container, Value value) {
         return container.find(value) != container.end();
