@@ -85,7 +85,12 @@ namespace vstd {
         } catch (...) {
             return std::make_pair(0, false);
         }
-    };
+    }
+
+    template<typename T=void>
+    bool is_int(std::string s) {
+        return to_int(s).second;
+    }
 
     template<typename Ctn=std::list<std::string>>
     std::string join(Ctn list, std::string sep) {
