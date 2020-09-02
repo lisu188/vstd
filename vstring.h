@@ -165,4 +165,12 @@ namespace vstd {
         ret.insert(arg);
         return ret;
     }
+
+    template<typename T=void>
+    std::string add_in_line(std::string org, std::string _new) {
+        if (_new.empty()) {
+            return org;
+        }
+        return org + "\n" + _new;
+    }
 }

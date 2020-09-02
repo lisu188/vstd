@@ -35,6 +35,11 @@ namespace vstd {
         return container.find(value) != container.end();
     }
 
+    template<typename Container=std::string, typename Value>
+    bool ctn(std::string &container, Value value) {
+        return container.find(value) != std::string::npos;
+    }
+
     template<typename Container, typename Value, typename Comparator>
     bool ctn(Container &container, Value value, Comparator cmp) {
         for (auto x:container) {
