@@ -68,7 +68,9 @@ private: \
 // definition for FOO
 #define V_METHOD(...) VFUNC(V_METHOD, __VA_ARGS__)
 
-#define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER) std::make_shared<vstd::detail::property_impl<CLASS,TYPE>>(V_STRING(NAME),&CLASS::GETTER,&CLASS::SETTER)
+#define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER) std::make_shared<vstd::detail::property_impl<CLASS,TYPE>>\
+                                                        (V_STRING(NAME),&CLASS::GETTER,&CLASS::SETTER),        \
+                                                        V_METHOD(CLASS,GETTER,TYPE),V_METHOD(CLASS,SETTER,void,TYPE)
 
 #define V_METHOD2(CLASS, NAME) std::make_shared<vstd::detail::method_impl<CLASS,void>>(V_STRING(NAME),&CLASS::NAME)
 #define V_METHOD3(CLASS, NAME, RET_TYPE) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE>>(V_STRING(NAME),&CLASS::NAME)

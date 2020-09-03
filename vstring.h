@@ -152,25 +152,10 @@ namespace vstd {
         return boost::filesystem::path(script).stem().string();
     }
 
-    template<typename T, typename ...Args>
-    std::set<T> set(T arg, Args... args) {
-        std::set<T> ret = vstd::set(args...);
-        ret.insert(arg);
-        return ret;
-    }
-
-    template<typename T>
-    std::set<T> set(T arg) {
-        std::set<T> ret;
-        ret.insert(arg);
-        return ret;
-    }
-
     template<typename T=void>
-    std::string add_in_line(std::string org, std::string _new) {
-        if (_new.empty()) {
-            return org;
+    void add_line(std::string &org, std::string _new) {
+        if (!_new.empty()) {
+            org += "\n" + _new;
         }
-        return org + "\n" + _new;
     }
 }

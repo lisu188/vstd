@@ -255,4 +255,18 @@ namespace vstd {
     bool all_equals(A a, B b, Args... args) {
         return a == b && all_equals(a, args...) && all_equals(b, args...);
     }
+
+    template<typename T, typename ...Args>
+    std::set<T> set(T arg, Args... args) {
+        std::set<T> ret = vstd::set(args...);
+        ret.insert(arg);
+        return ret;
+    }
+
+    template<typename T>
+    std::set<T> set(T arg) {
+        std::set<T> ret;
+        ret.insert(arg);
+        return ret;
+    }
 }
