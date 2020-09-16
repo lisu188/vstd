@@ -21,7 +21,9 @@
 #include <cctype>
 #include <locale>
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 #include "vdefines.h"
+#include "vutil.h"
 
 namespace vstd {
     class stringable {
@@ -157,5 +159,17 @@ namespace vstd {
         if (!_new.empty()) {
             org += "\n" + _new;
         }
+    }
+
+    template<typename T=void>
+    std::string camel(std::string org) {
+        if (ctn(org, ' ')) {
+            std::string ret = "";
+            for (auto str: split(org, ' ')) {
+                ret += (camel(str) + " ");
+            }
+            return ret;
+        }
+        return boost::to_upper_copy<std::string>(org.substr(0, 1)) + org.substr(1, org.length());
     }
 }
