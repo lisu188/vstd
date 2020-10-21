@@ -78,6 +78,16 @@ namespace vstd {
         }
     }
 
+    template<typename Container, typename Predicate>
+    void erase_if(Container &container, Predicate predicate) {
+        for (auto it = container.begin(); it != container.end(); it++) {
+            if (predicate(*it)) {
+                container.erase(it);
+                break;
+            }
+        }
+    }
+
     template<typename Container>
     auto get(Container &container, int index) {
         return *std::next(container.begin(), index);
