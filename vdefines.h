@@ -12,7 +12,7 @@
 #pragma once
 
 //TODO: this shoul be done via command line api
-//#define PYTHON_LOGGING
+#define PYTHON_LOGGING
 
 #ifdef PYTHON_LOGGING
 #define PYTHON_LOG vstd::logger::debug();PyErr_Print()
