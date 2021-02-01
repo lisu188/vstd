@@ -159,6 +159,11 @@ namespace vstd {
     };
 
     template<typename T>
+    int rand(T max) {
+        return rand(0, max );
+    };
+
+    template<typename T>
     static T *allocate(size_t size) {
         static boost::pool_allocator<T> _pool;
         return _pool.allocate(size);
