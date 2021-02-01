@@ -25,9 +25,19 @@
 #include "vcast.h"
 
 namespace vstd {
+    template<typename Container>
+    auto any(Container &container) {
+        return *std::find_if(container.begin(), container.end(), [](auto it) { return true; });
+    }
+
     template<typename Container, typename Value>
     bool ctn(Container &container, Value value) {
         return container.find(value) != container.end();
+    }
+
+    template<typename Container=std::string, typename Value>
+    bool ctn(std::string &container, Value value) {
+        return container.find(value) != std::string::npos;
     }
 
     template<typename Container, typename Value, typename Comparator>
@@ -40,10 +50,38 @@ namespace vstd {
         return false;
     }
 
+    template<typename Container, typename Predicate>
+    bool ctn_pred(Container &container, Predicate pred) {
+        return std::find_if(container.begin(), container.end(), pred) != container.end();
+    }
+
+    template<typename Container, typename Predicate>
+    auto find_if(Container &container, Predicate predicate) {
+        return *std::find_if(container.begin(), container.end(), predicate);
+    }
+
+    template<typename Container, typename Predicate, typename Callback>
+    auto execute_if(Container &container, Predicate predicate, Callback callback) {
+        if (std::find_if(container.begin(), container.end(), predicate) != container.end()) {
+            callback(*std::find_if(container.begin(), container.end(), predicate));
+        }
+    }
+
+
     template<typename Container, typename Value, typename Comparator>
     void erase(Container &container, Value value, Comparator cmp) {
         for (auto it = container.begin(); it != container.end(); it++) {
             if (cmp(value, *it)) {
+                container.erase(it);
+                break;
+            }
+        }
+    }
+
+    template<typename Container, typename Predicate>
+    void erase_if(Container &container, Predicate predicate) {
+        for (auto it = container.begin(); it != container.end(); it++) {
+            if (predicate(*it)) {
                 container.erase(it);
                 break;
             }
@@ -71,9 +109,13 @@ namespace vstd {
         return std::bind(f, args...);
     }
 
+    template<typename F, typename... Args>
+    std::function<typename function_traits<F>::return_type()> bind(F f) {
+        return f;
+    }
+
     template<typename Range, typename Value=typename range_traits<Range>::value_type>
     std::set<Value> collect(Range r) {
-
         return cast<std::set<Value>>(r);
     }
 
@@ -91,6 +133,15 @@ namespace vstd {
         return x;
     }
 
+    template<typename T>
+    class list : public std::list<T> {
+    public:
+        template<typename U>
+        void insert(U u) {
+            this->push_back(u);
+        }
+    };
+
     template<typename F,
             typename ret=typename vstd::function_traits<F>::return_type,
             typename arg=typename vstd::function_traits<F>::template arg<0>::type>
@@ -107,7 +158,7 @@ namespace vstd {
         return std::function<ret()>(f);
     }
 
-    //TODO: use somewhere std::priority_queue<T,std::vector<T>,std::function<bool ( T,T ) >>
+//TODO: use somewhere std::priority_queue<T,std::vector<T>,std::function<bool ( T,T ) >>
     template<typename T, typename Queue=std::queue<T>>
     class blocking_queue {
     private:
@@ -182,11 +233,55 @@ namespace vstd {
         return ret;
     }
 
-    //TODO: handle return types
+//TODO: handle return types
     template<typename T, typename C>
     static void if_not_null(T object, C callback) {
         if (object) {
             callback(object);
         }
+    }
+
+    template<typename T>
+    static double percent(T object, double percent) {
+        return object * (percent / 100.0);
+    }
+
+    template<typename R, typename T, typename F>
+    R with(T t, F f, typename vstd::enable_if<std::is_void<R>::value>::type * = 0) {
+        if (t) {
+            f(t);
+        }
+    };
+
+    template<typename R, typename T, typename F>
+    R with(T t, F f, typename vstd::disable_if<std::is_void<R>::value>::type * = 0) {
+        if (t) {
+            return f(t);
+        }
+        return R();
+    }
+
+    template<typename A>
+    bool all_equals(A) {
+        return true;
+    }
+
+    template<typename A, typename B, typename...Args>
+    bool all_equals(A a, B b, Args... args) {
+        return a == b && all_equals(a, args...) && all_equals(b, args...);
+    }
+
+    template<typename T, typename ...Args>
+    std::set<T> set(T arg, Args... args) {
+        std::set<T> ret = vstd::set(args...);
+        ret.insert(arg);
+        return ret;
+    }
+
+    template<typename T>
+    std::set<T> set(T arg) {
+        std::set<T> ret;
+        ret.insert(arg);
+        return ret;
     }
 }

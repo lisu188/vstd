@@ -22,13 +22,13 @@ namespace vstd {
         typedef _Head type;
     };
 
-    template<typename _Head, typename... _Tail>
+    template<typename _Head=void, typename... _Tail>
     struct tuple_size {
-        size_t size = tuple_size<_Tail...>::size + 1;
+        static constexpr size_t size = tuple_size<_Tail...>::size + 1;
     };
 
-    template<typename _Head>
-    struct tuple_size<_Head> {
-        size_t size = 1;
+    template<>
+    struct tuple_size<void> {
+        static constexpr size_t size = 0;
     };
 }

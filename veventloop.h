@@ -25,11 +25,14 @@ namespace vstd {
         int lastFrameTime = SDL_GetTicks();
         Uint32 _call_function_event = SDL_RegisterEvents(1);
         std::thread::id _main_thread_id = std::this_thread::get_id();
+
         std::priority_queue<std::pair<int, std::function<void()>>,
                 std::vector<std::pair<int, std::function<void()>>>,
                 DelayCompare> delayQueue;
+        std::list<std::pair<std::function<bool()>, std::function<void()>>> conditionalQueue;
+
         std::list<std::function<void(int)>> frameCallbackList;
-        std::list<std::function<void(SDL_Event * )>> eventCallbackList;
+        std::list<std::function<bool(SDL_Event *)>> eventCallbackList;
     public:
         static std::shared_ptr<event_loop> instance() {
             static std::shared_ptr<vstd::event_loop<>> _loop = std::make_shared<vstd::event_loop<>>();
@@ -42,6 +45,12 @@ namespace vstd {
             event.type = _call_function_event;
             event.user.data1 = new std::function<void()>(f);
             SDL_PushEvent(&event);
+        }
+
+        void invoke_when(std::function<bool()> pred, std::function<void()> func) {
+            invoke([=]() {
+                conditionalQueue.push_back(std::make_pair(pred, func));
+            });
         }
 
         void await(std::function<void()> f) {
@@ -76,7 +85,7 @@ namespace vstd {
             frameCallbackList.push_back(f);
         }
 
-        void registerEventCallback(std::function<void(SDL_Event * )> f) {
+        void registerEventCallback(std::function<bool(SDL_Event *)> f) {
             eventCallbackList.push_back(f);
         }
 
@@ -89,7 +98,19 @@ namespace vstd {
                     return false;
                 }
                 for (auto cm:eventCallbackList) {
-                    cm(&event);
+                    if (cm(&event)) {
+                        break;
+                    }
+                }
+            }
+
+            auto it = conditionalQueue.begin();
+            while (it != conditionalQueue.end()) {
+                if (it->first()) {
+                    it->second();
+                    it = conditionalQueue.erase(it);
+                } else {
+                    ++it;
                 }
             }
 
@@ -124,7 +145,9 @@ namespace vstd {
                 if (event->type == _call_function_event) {
                     static_cast<std::function<void()> *>(event->user.data1)->operator()();
                     delete static_cast<std::function<void()> *>(event->user.data1);
+                    return true;
                 }
+                return false;
             });
         }
 

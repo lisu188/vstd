@@ -54,9 +54,9 @@ namespace vstd {
 
     template<typename ClassType, typename ReturnType, typename... Args>
     struct function_traits<ReturnType (ClassType::*)(Args...) const> {
-        enum {
-            arity = sizeof... (Args)
-        };
+
+        constexpr static size_t arity = sizeof... (Args);
+
 
         typedef ReturnType return_type;
 

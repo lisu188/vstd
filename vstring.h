@@ -21,7 +21,9 @@
 #include <cctype>
 #include <locale>
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 #include "vdefines.h"
+#include "vutil.h"
 
 namespace vstd {
     class stringable {
@@ -85,10 +87,15 @@ namespace vstd {
         } catch (...) {
             return std::make_pair(0, false);
         }
-    };
+    }
 
     template<typename T=void>
-    std::string join(std::list<std::string> list, std::string sep) {
+    bool is_int(std::string s) {
+        return to_int(s).second;
+    }
+
+    template<typename Ctn=std::list<std::string>>
+    std::string join(Ctn list, std::string sep) {
         std::stringstream stream;
         unsigned int i = 0;
         for (std::string str:list) {
@@ -145,5 +152,24 @@ namespace vstd {
     template<typename T=void>
     std::string stem(const std::string &script) {
         return boost::filesystem::path(script).stem().string();
+    }
+
+    template<typename T=void>
+    void add_line(std::string &org, std::string _new) {
+        if (!_new.empty()) {
+            org += "\n" + _new;
+        }
+    }
+
+    template<typename T=void>
+    std::string camel(std::string org) {
+        if (ctn(org, ' ')) {
+            std::string ret = "";
+            for (auto str: split(org, ' ')) {
+                ret += (camel(str) + " ");
+            }
+            return ret;
+        }
+        return boost::to_upper_copy<std::string>(org.substr(0, 1)) + org.substr(1, org.length());
     }
 }

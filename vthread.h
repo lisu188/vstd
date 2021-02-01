@@ -25,6 +25,8 @@ namespace vstd {
 
     extern std::function<void(std::function<bool()>)> get_wait_until_handler();
 
+    extern std::function<void(std::function<bool()>, std::function<void()>)> get_call_when_handler();
+
     extern std::function<void(int, std::function<void()>)> get_call_delayed_async_handler();
 
     extern std::function<void(int, std::function<void()>)> get_call_delayed_later_handler();
@@ -52,11 +54,7 @@ namespace vstd {
 
     template<typename Predicate, typename Function, typename... Arguments>
     void call_when(Predicate pred, Function func, Arguments... params) {
-        auto bind = vstd::bind(func, params...);
-        call_later([pred, bind]() {
-            wait_until(pred);
-            call_later(bind);
-        });
+        get_call_when_handler()(pred,vstd::bind(func, params...));
     }
 
     template<typename Function, typename... Arguments>

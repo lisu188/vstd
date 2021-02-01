@@ -13,6 +13,7 @@
 
 #include "vdefines.h"
 #include "vtraits.h"
+#include "vutil.h"
 
 namespace vstd {
     namespace functional {
@@ -30,40 +31,52 @@ namespace vstd {
             f(args...);
         }
 
-        template<typename Ctn, typename Func>
-        std::set<typename function_traits<Func>::return_type> map(Ctn ctn, Func f) {
-            typedef typename function_traits<Func>::return_type Return;
-            std::set<Return> ret;
-            for (typename Ctn::value_type val:ctn) {
-                ret.insert(call<Return>(f, val));
+        template<typename Return, typename Container, typename Func>
+        Return map(Container &container, Func f) {
+            Return ret;
+            for (typename Container::value_type val:container) {
+                ret.insert(f(val));
             }
             return ret;
         }
 
-        template<typename Ctn, typename Func>
-        void map(Ctn ctn, Func f) {
-            for (auto val:ctn) {
+        template<typename Container, typename Func>
+        void foreach(Container &container, Func f) {
+            for (auto val:container) {
                 f(val);
             }
         }
 
-        template<typename T, typename Ctn, typename Func>
-        T sum(Ctn ctn, Func f) {
+        template<typename T, typename Container, typename Func>
+        T sum(Container &container, Func f) {
             T s = 0;
-            for (auto val:ctn) {
+            for (auto val:container) {
                 s += f(val);
             }
             return s;
         }
 
 
-        template<typename T, typename Ctn>
-        T sum(Ctn ctn) {
+        template<typename T, typename Container>
+        T sum(Container &container) {
             T s = 0;
-            for (auto val:ctn) {
+            for (auto val:container) {
                 s += val;
             }
             return s;
+        }
+
+        template<typename Return, typename Container, typename Func>
+        auto map_reduce(Container &container, Func f) {
+            std::unordered_map<Return, std::set<typename Container::value_type>> ret;
+            for (auto val:container) {
+                auto bucket = f(val);
+                if (!ctn(ret, bucket)) {
+                    ret[bucket] = std::set<typename Container::value_type>();
+                }
+                ret[bucket].insert(val);
+            }
+            return ret;
         }
     }
 }

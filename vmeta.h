@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <memory>
 #include "vany.h"
+#include "vbind.h"
 
 #define V_VOID boost::typeindex::type_id<void>()
 
@@ -67,11 +68,15 @@ private: \
 // definition for FOO
 #define V_METHOD(...) VFUNC(V_METHOD, __VA_ARGS__)
 
-#define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER) std::make_shared<vstd::detail::property_impl<CLASS,TYPE>>(V_STRING(NAME),&CLASS::GETTER,&CLASS::SETTER)
+#define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER) std::make_shared<vstd::detail::property_impl<CLASS,TYPE>>\
+                                                        (V_STRING(NAME),&CLASS::GETTER,&CLASS::SETTER),        \
+                                                        V_METHOD(CLASS,GETTER,TYPE),V_METHOD(CLASS,SETTER,void,TYPE)
 
 #define V_METHOD2(CLASS, NAME) std::make_shared<vstd::detail::method_impl<CLASS,void>>(V_STRING(NAME),&CLASS::NAME)
 #define V_METHOD3(CLASS, NAME, RET_TYPE) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE>>(V_STRING(NAME),&CLASS::NAME)
 #define V_METHOD4(CLASS, NAME, RET_TYPE, ...) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE,__VA_ARGS__>>(V_STRING(NAME),&CLASS::NAME)
+#define V_METHOD5(CLASS, NAME, RET_TYPE, ...) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE,__VA_ARGS__>>(V_STRING(NAME),&CLASS::NAME)
+#define V_METHOD6(CLASS, NAME, RET_TYPE, ...) std::make_shared<vstd::detail::method_impl<CLASS,RET_TYPE,__VA_ARGS__>>(V_STRING(NAME),&CLASS::NAME)
 
 namespace vstd {
     //TODO: allow method overrides, use composite key in _methods in meta
@@ -79,7 +84,7 @@ namespace vstd {
     public:
         virtual std::string name() = 0;
 
-        virtual boost::any invoke(boost::any args...) = 0;
+        virtual boost::any invoke(std::vector<boost::any> args) = 0;
 
         virtual boost::typeindex::type_index object_type() = 0;
 
@@ -108,6 +113,13 @@ namespace vstd {
             std::function<ReturnType(ObjectType *, ArgumentTypes...)> _func;
 
         public:
+
+            template<typename Method>
+            method_impl(std::string name, Method method, bool external):
+                    _name(name), _func(method) {
+
+            }
+
             template<typename Method>
             method_impl(std::string name, Method method) :
                     _name(name), _func(std::mem_fn(method)) {
@@ -131,35 +143,47 @@ namespace vstd {
             }
 
             //TODO: implement arguments and return type
-            boost::any invoke(boost::any args...) override {
-                return _invoke(args);
+            boost::any invoke(std::vector<boost::any> args) override {
+                return _call(_bind<0>(_func, args));
             }
 
-
-            template<typename T=ReturnType>
-            boost::any _invoke(std::initializer_list<boost::any> args,
-                               typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) {
-                _func(vstd::any_cast<std::shared_ptr<ObjectType >>(*args.begin()).get());
+            template<typename F, typename T=ReturnType>
+            auto
+            _call(F function, typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) {
+                function();
                 return boost::any();
             }
 
-            template<typename T=ReturnType>
-            boost::any _invoke(std::initializer_list<boost::any> args,
-                               typename vstd::disable_if<vstd::is_same<T, void>::value>::type * = 0) {
-                return boost::any(_func(vstd::any_cast<std::shared_ptr<ObjectType >>(*args.begin()).get()));
+            template<typename F, typename T=ReturnType>
+            auto
+            _call(F function, typename vstd::disable_if<vstd::is_same<T, void>::value>::type * = 0) {
+                return function();
             }
 
-            template<typename T=ReturnType>
-            boost::any _invoke(boost::any arg,
-                               typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) {
-                _func(vstd::any_cast<std::shared_ptr<ObjectType >>(arg).get());
-                return boost::any();
+            template<int argNo, typename F>
+            auto _bind(F function, std::vector<boost::any> args,
+                       typename vstd::disable_if<
+                               argNo < vstd::tuple_size<ObjectType, ArgumentTypes...>::size - 1>::type * = 0) {
+                return _bind<argNo>(function, args[argNo]);
             }
 
-            template<typename T=ReturnType>
-            boost::any _invoke(boost::any arg,
-                               typename vstd::disable_if<vstd::is_same<T, void>::value>::type * = 0) {
-                return boost::any(_func(vstd::any_cast<std::shared_ptr<ObjectType >>(arg).get()));
+            template<int argNo, typename F>
+            auto _bind(F function, std::vector<boost::any> args,
+                       typename vstd::enable_if<
+                               argNo < vstd::tuple_size<ObjectType, ArgumentTypes...>::size - 1>::type * = 0) {
+                return _bind<argNo + 1>(_bind<argNo>(function, args[argNo]), args);
+            }
+
+            template<int argNo, typename F>
+            auto _bind(F function, boost::any arg, typename vstd::disable_if<argNo == 0>::type * = 0) {
+                return vstd::partial::bind(function,
+                                           vstd::any_cast<typename vstd::tuple_element<argNo, ObjectType, ArgumentTypes...>::type>(
+                                                   arg));
+            }
+
+            template<int argNo, typename F>
+            auto _bind(F function, boost::any arg, typename vstd::enable_if<argNo == 0>::type * = 0) {
+                return vstd::partial::bind(function, vstd::any_cast<std::shared_ptr<ObjectType >>(arg).get());
             }
 
 
@@ -317,14 +341,25 @@ namespace vstd {
         }
 
         template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes>
-        std::shared_ptr<method> _get_method_object(std::string name) {
+        std::shared_ptr<method> _get_method_object(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_methods, name)) {
                 return _methods[name];
+            } else if (vstd::ctn(ob->dynamic_methods(), name)) {
+                return ob->dynamic_methods()[name];
             } else if (auto super_p = super() ? super()->_get_method_object<ObjectType,
-                    ReturnType, ArgumentTypes...>(name) : nullptr) {
+                    ReturnType, ArgumentTypes...>(ob, name) : nullptr) {
                 return super_p;
             }
+            //TODO: handle differently
             return std::make_shared<vstd::detail::method_impl<ObjectType, ReturnType, ArgumentTypes...>>(name);
+        }
+
+        template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes, typename Function>
+        void _set_method_object(std::shared_ptr<ObjectType> ob, std::string name, Function function) {
+            ob->dynamic_methods()[name] = std::make_shared<vstd::detail::method_impl<ObjectType, ReturnType, ArgumentTypes...>>(
+                    name,
+                    function,
+                    true);
         }
 
     public:
@@ -353,14 +388,14 @@ namespace vstd {
         template<typename ReturnType, typename ObjectType, typename ...ArgumentTypes>
         void invoke_method(std::string name, std::shared_ptr<ObjectType> t, ArgumentTypes... args,
                            typename vstd::enable_if<std::is_same<ReturnType, void>::value>::type * = 0) {
-            _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(name)->invoke(t, args...);
+            _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(t, name)->invoke({t, args...});
         }
 
         template<typename ReturnType, typename ObjectType, typename ...ArgumentTypes>
         ReturnType invoke_method(std::string name, std::shared_ptr<ObjectType> t, ArgumentTypes... args,
                                  typename vstd::disable_if<std::is_same<ReturnType, void>::value>::type * = 0) {
             return vstd::any_cast<ReturnType>(
-                    _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(name)->invoke(t, args...));
+                    _get_method_object<ObjectType, ReturnType, ArgumentTypes...>(t, name)->invoke({t, args...}));
         }
 
         template<typename ObjectType, typename PropertyType>
@@ -374,6 +409,11 @@ namespace vstd {
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
                                   typename vstd::enable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
             return _get_property_object<ObjectType, PropertyType>(t, prop)->get(t);
+        }
+
+        template<typename ObjectType, typename ReturnType, typename ...ArgumentTypes, typename Function>
+        void set_method(std::string method, std::shared_ptr<ObjectType> t, Function function) {
+            _set_method_object<ObjectType, ReturnType, ArgumentTypes...>(t, method, function);
         }
 
         template<typename ObjectType>
@@ -402,8 +442,12 @@ namespace vstd {
             return props;
         }
 
-
+        template<typename ObjectType>
+        bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
+            auto props = properties(ob);
+            return vstd::ctn_pred(props, [=](auto prop) {
+                return prop->name() == name;
+            });
+        }
     };
-
-
 }

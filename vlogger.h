@@ -22,7 +22,7 @@ namespace vstd {
         template<typename T, typename U, typename ...Args>
         static void log(T t, U u, Args... args) {
             std::stringstream stream;
-            stream << vstd::str(t) << " " << u;
+            stream << vstd::str(t) << " " << vstd::str(u);
             log(stream.str(), args...);
         }
 
