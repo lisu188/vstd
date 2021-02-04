@@ -214,6 +214,13 @@ namespace vstd {
         return rand(0, max );
     };
 
+    template<typename Ctn>
+    auto random_element(Ctn & ctn) {
+        auto iterator=ctn.begin();
+        std::advance(iterator,vstd::rand(ctn.size()));
+        return *iterator;
+    };
+
     template<typename T>
     static T *allocate(size_t size) {
         static boost::pool_allocator<T> _pool;
