@@ -206,18 +206,18 @@ namespace vstd {
 
     template<typename T, typename U>
     int rand(T min, U max) {
-        return abs((unif()(rng()) + 0.5) * (max - min)) + min;
+        return round((unif()(rng()) + 0.5) * (max - min)) + min;
     };
 
     template<typename T>
     int rand(T max) {
-        return rand(0, max );
+        return rand(0, max);
     };
 
     template<typename Ctn>
-    auto random_element(Ctn & ctn) {
-        auto iterator=ctn.begin();
-        std::advance(iterator,vstd::rand(ctn.size()));
+    auto random_element(Ctn &ctn) {
+        auto iterator = ctn.begin();
+        std::advance(iterator, vstd::rand(ctn.size()));
         return *iterator;
     };
 
