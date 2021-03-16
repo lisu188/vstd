@@ -429,15 +429,15 @@ namespace vstd {
         }
 
         template<typename ObjectType>
-        std::set<std::shared_ptr<vstd::property>> properties(std::shared_ptr<ObjectType> ob) {
-            std::set<std::shared_ptr<vstd::property>> props;
+        std::shared_ptr<std::set<std::shared_ptr<vstd::property>>> properties(std::shared_ptr<ObjectType> ob) {
+            std::shared_ptr<std::set<std::shared_ptr<vstd::property>>> props = std::make_shared<std::set<std::shared_ptr<vstd::property>>>();
             auto vals = _props | boost::adaptors::map_values;
-            props.insert(vals.begin(), vals.end());
+            props->insert(vals.begin(), vals.end());
             vals = ob->dynamic_props() | boost::adaptors::map_values;
-            props.insert(vals.begin(), vals.end());
+            props->insert(vals.begin(), vals.end());
             if (auto _super = super()) {
                 auto _props = _super->properties(ob);
-                props.insert(_props.begin(), _props.end());
+                props->insert(_props->begin(), _props->end());
             }
             return props;
         }
@@ -445,7 +445,7 @@ namespace vstd {
         template<typename ObjectType>
         bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
             auto props = properties(ob);
-            return vstd::ctn_pred(props, [=](auto prop) {
+            return vstd::ctn_pred(*props, [=](auto prop) {
                 return prop->name() == name;
             });
         }
