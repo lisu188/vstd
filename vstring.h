@@ -11,8 +11,8 @@
  */
 #pragma once
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <list>
 #include <string>
 #include <sstream>
@@ -22,6 +22,7 @@
 #include <locale>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+#include <utility>
 #include "vdefines.h"
 #include "vutil.h"
 
@@ -32,7 +33,7 @@ namespace vstd {
     };
 
     template<typename T=void>
-    std::string replace(std::string str, std::string from, std::string to) {
+    std::string replace(std::string str, const std::string &from, const std::string &to) {
         size_t start_pos = str.find(from);
         if (start_pos == std::string::npos) {
             return str;
@@ -54,12 +55,12 @@ namespace vstd {
     }
 
     template<typename T=void>
-    std::string trim(std::string s) {
+    std::string trim(const std::string &s) {
         return ltrim(rtrim(s));
     }
 
     template<typename T=void>
-    bool is_empty(std::string string) {
+    bool is_empty(const std::string &string) {
         return trim(string).length() == 0;
     }
 
@@ -71,34 +72,36 @@ namespace vstd {
     }
 
     template<typename T=void>
-    std::string str(std::shared_ptr<stringable> c) {
+    std::string str(const std::shared_ptr<stringable> &c) {
         return c->to_string();
     }
 
     template<typename T=void>
-    std::pair<int, bool> to_int(std::string s) {
-        try {
-            size_t result;
-            int value = std::stoi(s, &result);
-            if (result != s.size()) {
-                return std::make_pair(value, false);
+    std::pair<int, bool> to_int(const std::string &s) {
+        if (isdigit(s[0])) {
+            try {
+                size_t result;
+                int value = std::stoi(s, &result);
+                if (result != s.size()) {
+                    return std::make_pair(value, false);
+                }
+                return std::make_pair(value, true);
+            } catch (...) {
             }
-            return std::make_pair(value, true);
-        } catch (...) {
-            return std::make_pair(0, false);
         }
+        return std::make_pair(0, false);
     }
 
     template<typename T=void>
-    bool is_int(std::string s) {
+    bool is_int(const std::string &s) {
         return to_int(s).second;
     }
 
     template<typename Ctn=std::list<std::string>>
-    std::string join(Ctn list, std::string sep) {
+    std::string join(Ctn list, const std::string &sep) {
         std::stringstream stream;
         unsigned int i = 0;
-        for (std::string str:list) {
+        for (const std::string &str:list) {
             stream << str;
             if (i++ != list.size() - 1) {
                 stream << sep;
@@ -108,7 +111,7 @@ namespace vstd {
     }
 
     template<typename T=void>
-    std::vector<std::string> split(std::string s, char delim) {
+    std::vector<std::string> split(const std::string &s, char delim) {
         std::vector<std::string> elems;
         std::stringstream ss(s);
         std::string item;
@@ -124,7 +127,7 @@ namespace vstd {
     }
 
     template<typename T=void>
-    bool ends_with(std::string full_string, std::string ending) {
+    bool ends_with(const std::string &full_string, const std::string &ending) {
         if (full_string.length() >= ending.length()) {
             return (0 == full_string.compare(full_string.length() - ending.length(), ending.length(), ending));
         } else {
@@ -135,14 +138,14 @@ namespace vstd {
     template<typename T=void>
     wchar_t *to_wchar(const char *text) {
         size_t size = strlen(text) + 1;
-        wchar_t *wa = new wchar_t[size];
+        auto *wa = new wchar_t[size];
         mbstowcs(wa, text, size);
         return wa;
     }
 
     template<typename T=void>
     wchar_t **to_wchar(int size, const char **text) {
-        wchar_t **wa = new wchar_t *[size];
+        auto **wa = new wchar_t *[size];
         for (int i = 0; i < size; i++) {
             wa[i] = to_wchar(text[i]);
         }
@@ -155,7 +158,7 @@ namespace vstd {
     }
 
     template<typename T=void>
-    void add_line(std::string &org, std::string _new) {
+    void add_line(std::string &org, const std::string &_new) {
         if (!_new.empty()) {
             org += "\n" + _new;
         }
@@ -164,8 +167,8 @@ namespace vstd {
     template<typename T=void>
     std::string camel(std::string org) {
         if (ctn(org, ' ')) {
-            std::string ret = "";
-            for (auto str: split(org, ' ')) {
+            std::string ret;
+            for (const auto &str: split(org, ' ')) {
                 ret += (camel(str) + " ");
             }
             return ret;

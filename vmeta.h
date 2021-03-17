@@ -9,6 +9,7 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+//TODO: line 36 optimize, do not use map
 #pragma once
 
 #include <boost/any.hpp>
@@ -331,8 +332,8 @@ namespace vstd {
                 return _props[name];
             } else if (vstd::ctn(ob->dynamic_props(), name)) {
                 return ob->dynamic_props()[name];
-            } else if (auto super_p = super() ? super()->_get_property_object<ObjectType, PropertyType>(ob, name)
-                                              : nullptr) {
+            } else if (auto super_p = _super ? _super->_get_property_object<ObjectType, PropertyType>(ob, name)
+                                             : nullptr) {
                 return super_p;
             }
             ob->dynamic_props()[name] = std::make_shared<detail::dynamic_property_impl<ObjectType, PropertyType>>(
@@ -346,7 +347,7 @@ namespace vstd {
                 return _methods[name];
             } else if (vstd::ctn(ob->dynamic_methods(), name)) {
                 return ob->dynamic_methods()[name];
-            } else if (auto super_p = super() ? super()->_get_method_object<ObjectType,
+            } else if (auto super_p = _super ? _super->_get_method_object<ObjectType,
                     ReturnType, ArgumentTypes...>(ob, name) : nullptr) {
                 return super_p;
             }
@@ -367,7 +368,7 @@ namespace vstd {
             for (auto &[name, property]:_props) {
                 propertyCallback(property);
             }
-            if (auto _super = super()) {
+            if (_super) {
                 _super->_for_properties(propertyCallback);
             }
         }
@@ -387,7 +388,7 @@ namespace vstd {
         }
 
         bool inherits(std::string clas) {
-            return name() == clas || (super() && super()->inherits(clas));
+            return name() == clas || (_super && _super->inherits(clas));
         }
 
         template<typename ObjectType, typename PropertyType>
@@ -432,8 +433,8 @@ namespace vstd {
                 return _props[name]->value_type();
             } else if (vstd::ctn(ob->dynamic_props(), name)) {
                 return ob->dynamic_props()[name]->value_type();
-            } else if (super()) {
-                return super()->get_property_type<ObjectType>(ob, name);
+            } else if (_super) {
+                return _super->get_property_type<ObjectType>(ob, name);
             }
             return boost::typeindex::type_id<void>();
         }
@@ -445,7 +446,7 @@ namespace vstd {
             props->insert(vals.begin(), vals.end());
             vals = ob->dynamic_props() | boost::adaptors::map_values;
             props->insert(vals.begin(), vals.end());
-            if (auto _super = super()) {
+            if (_super) {
                 auto _props = _super->properties(ob);
                 props->insert(_props->begin(), _props->end());
             }
@@ -463,7 +464,7 @@ namespace vstd {
         template<typename ObjectType>
         bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
             bool result;
-            for_properties(ob, [&](auto property) {
+            for_properties(ob, [&](auto &property) {
                 result = result || property->name() == name;//TODO: stop iteration when found
             });
             return result;
