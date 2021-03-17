@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2021 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
@@ -362,6 +362,16 @@ namespace vstd {
                     true);
         }
 
+        template<typename PropertyCallback>
+        void _for_properties(PropertyCallback propertyCallback) {
+            for (auto &[name, property]:_props) {
+                propertyCallback(property);
+            }
+            if (auto _super = super()) {
+                _super->_for_properties(propertyCallback);
+            }
+        }
+
     public:
         template<typename... Args>
         meta(std::string name, std::shared_ptr<meta> super, Args... props) : _name(name), _super(super) {
@@ -442,12 +452,21 @@ namespace vstd {
             return props;
         }
 
+        template<typename ObjectType, typename PropertyCallback>
+        void for_properties(std::shared_ptr<ObjectType> ob, PropertyCallback propertyCallback) {
+            _for_properties(propertyCallback);
+            for (auto &[name, property]:   ob->dynamic_props()) {
+                propertyCallback(property);
+            }
+        }
+
         template<typename ObjectType>
         bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
-            auto props = properties(ob);
-            return vstd::ctn_pred(*props, [=](auto prop) {
-                return prop->name() == name;
+            bool result;
+            for_properties(ob, [&](auto property) {
+                result = result || property->name() == name;//TODO: stop iteration when found
             });
+            return result;
         }
     };
 }
