@@ -366,7 +366,9 @@ namespace vstd {
         template<typename PropertyCallback>
         void _for_properties(PropertyCallback propertyCallback) {
             for (auto &[name, property]:_props) {
-                propertyCallback(property);
+                if (propertyCallback(property)) {
+                    return;
+                }
             }
             if (_super) {
                 _super->_for_properties(propertyCallback);
@@ -453,19 +455,33 @@ namespace vstd {
             return props;
         }
 
-        template<typename ObjectType, typename PropertyCallback>
-        void for_properties(std::shared_ptr<ObjectType> ob, PropertyCallback propertyCallback) {
+        template<typename ObjectType,
+                typename PropertyCallback>
+        void for_properties(std::shared_ptr<ObjectType> ob,
+                            PropertyCallback propertyCallback) {
             _for_properties(propertyCallback);
             for (auto &[name, property]:   ob->dynamic_props()) {
-                propertyCallback(property);
+                if (propertyCallback(property)) {
+                    return;
+                }
             }
+        }
+
+        template<typename ObjectType,
+                typename PropertyCallback>
+        void for_all_properties(std::shared_ptr<ObjectType> ob,
+                                PropertyCallback propertyCallback) {
+            for_properties(ob, [&](auto prop) {
+                propertyCallback(prop);
+                return false;
+            });
         }
 
         template<typename ObjectType>
         bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
             bool result = false;
             for_properties(ob, [&](auto &property) {
-                result = result || property->name() == name;//TODO: stop iteration when found
+                return result = result || property->name() == name;
             });
             return result;
         }
