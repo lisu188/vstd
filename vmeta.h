@@ -463,7 +463,7 @@ namespace vstd {
 
         template<typename ObjectType>
         bool has_property(std::string name, std::shared_ptr<ObjectType> ob) {
-            bool result;
+            bool result = false;
             for_properties(ob, [&](auto &property) {
                 result = result || property->name() == name;//TODO: stop iteration when found
             });
