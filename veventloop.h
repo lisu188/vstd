@@ -17,7 +17,7 @@ namespace vstd {
     template<typename T=void>
     class event_loop {
         struct DelayCompare {
-            bool operator()(std::pair<int, std::function<void()>> a, std::pair<int, std::function<void()>> b) {
+            bool operator()(const std::pair<int, std::function<void()>> &a, std::pair<int, std::function<void()>> b) {
                 return std::greater<int>()(a.first, b.first);
             }
         };
@@ -39,7 +39,7 @@ namespace vstd {
             return _loop;
         }
 
-        void invoke(std::function<void()> f) {
+        void invoke(const std::function<void()> &f) {
             SDL_Event event;
             SDL_zero(event);
             event.type = _call_function_event;
@@ -47,13 +47,13 @@ namespace vstd {
             SDL_PushEvent(&event);
         }
 
-        void invoke_when(std::function<bool()> pred, std::function<void()> func) {
-            invoke([=]() {
-                conditionalQueue.push_back(std::make_pair(pred, func));
+        void invoke_when(const std::function<bool()> &pred, const std::function<void()> &func) {
+            invoke([=, this]() {
+                conditionalQueue.emplace_back(pred, func);
             });
         }
 
-        void await(std::function<void()> f) {
+        void await(const std::function<void()> &f) {
             if (std::this_thread::get_id() == _main_thread_id) {
                 f();
             } else {
@@ -71,21 +71,21 @@ namespace vstd {
             }
         }
 
-        void delay(int t, std::function<void()> f) {
+        void delay(int t, const std::function<void()> &f) {
             if (std::this_thread::get_id() == _main_thread_id) {
                 delayQueue.push(std::make_pair(SDL_GetTicks() + t, f));
             } else {
-                vstd::later([this, t, f]() {
+                vstd::later([=, this]() {
                     delayQueue.push(std::make_pair(SDL_GetTicks() + t, f));
                 });
             }
         }
 
-        void registerFrameCallback(std::function<void(int)> f) {
+        void registerFrameCallback(const std::function<void(int)> &f) {
             frameCallbackList.push_back(f);
         }
 
-        void registerEventCallback(std::function<bool(SDL_Event *)> f) {
+        void registerEventCallback(const std::function<bool(SDL_Event *)> &f) {
             eventCallbackList.push_back(f);
         }
 
@@ -97,7 +97,7 @@ namespace vstd {
                 if (event.type == SDL_QUIT) {
                     return false;
                 }
-                for (auto cm:eventCallbackList) {
+                for (const auto &cm:eventCallbackList) {
                     if (cm(&event)) {
                         break;
                     }
@@ -119,7 +119,7 @@ namespace vstd {
                 delayQueue.pop();
             }
 
-            for (auto f:frameCallbackList) {
+            for (const auto &f:frameCallbackList) {
                 f(frameTime);
             }
 
@@ -141,7 +141,7 @@ namespace vstd {
 
         event_loop() {
             SDL_Init(SDL_INIT_EVENTS);
-            registerEventCallback([=](SDL_Event *event) {
+            registerEventCallback([this](SDL_Event *event) {
                 if (event->type == _call_function_event) {
                     static_cast<std::function<void()> *>(event->user.data1)->operator()();
                     delete static_cast<std::function<void()> *>(event->user.data1);

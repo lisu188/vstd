@@ -166,7 +166,7 @@ namespace vstd {
             template<typename X=return_type>
             X getResult(typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                _condition.wait(lock, [=]() { return completed; });
+                _condition.wait(lock, [this]() { return completed; });
                 return *result;
             }
 
@@ -183,7 +183,7 @@ namespace vstd {
             template<typename X=return_type>
             void *getResult(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                _condition.wait(lock, [=]() { return completed; });
+                _condition.wait(lock, [this]() { return completed; });
                 return nullptr;
             }
 
@@ -255,7 +255,7 @@ namespace vstd {
     private:
         std::shared_ptr<detail::ccall<return_type, argument_type>> _call;
 
-        future(std::shared_ptr<detail::ccall<return_type, argument_type>> call, bool start = true) :
+        explicit future(std::shared_ptr<detail::ccall<return_type, argument_type>> call, bool start = true) :
                 _call(call) {
             if (start) {
                 _call->call();
