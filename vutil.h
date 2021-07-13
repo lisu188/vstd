@@ -221,6 +221,26 @@ namespace vstd {
         return *iterator;
     };
 
+    template<typename Ctn>
+    auto random_components(int value, Ctn possibleComponents) {
+        std::list<int> returnValue;
+        while (value > 0) {
+            std::set<int> possible_values;
+            for (const auto &it:possibleComponents) {
+                if (it <= value) {
+                    possible_values.insert(it);
+                }
+            }
+            if (possible_values.empty()) {
+                break;
+            }
+            int pow = vstd::random_element(possible_values);
+            returnValue.push_back(pow);
+            value -= pow;
+        }
+        return returnValue;
+    };
+
     template<typename T>
     static T *allocate(size_t size) {
         static boost::pool_allocator<T> _pool;
