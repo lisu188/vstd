@@ -215,9 +215,9 @@ namespace vstd {
     };
 
     template<typename Ctn>
-    auto random_element(Ctn &ctn) {
+    auto random_element(Ctn ctn) {
         auto iterator = ctn.begin();
-        std::advance(iterator, vstd::rand(ctn.size() - 1));
+        std::advance(iterator, vstd::rand(boost::size(ctn) - 1));
         return *iterator;
     };
 
