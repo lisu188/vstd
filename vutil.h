@@ -42,7 +42,7 @@ namespace vstd {
 
     template<typename Container, typename Value, typename Comparator>
     bool ctn(Container &container, Value value, Comparator cmp) {
-        for (auto x:container) {
+        for (auto x: container) {
             if (cmp(value, x)) {
                 return true;
             }
@@ -226,7 +226,7 @@ namespace vstd {
         std::list<int> returnValue;
         while (value > 0) {
             std::set<int> possible_values;
-            for (const auto &it:possibleComponents) {
+            for (const auto &it: possibleComponents) {
                 if (it <= value) {
                     possible_values.insert(it);
                 }
@@ -324,5 +324,24 @@ namespace vstd {
         std::list<T> ret;
         ret.push_back(arg);
         return ret;
+    }
+
+    template<typename T, typename U, typename V=typename T::key_type>
+    auto set_difference(T &first, U &last) {
+        std::set<V> to_add;
+        std::set<V> to_remove;
+
+        for (auto elem: last) {
+            if (!vstd::ctn(first, elem)) {
+                to_add.insert(elem);
+            }
+        }
+        for (auto elem: first) {
+            if (!vstd::ctn(last, elem)) {
+                to_remove.insert(elem);
+            }
+        }
+
+        return std::make_pair(to_add, to_remove);
     }
 }
