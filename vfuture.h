@@ -82,8 +82,6 @@ namespace vstd {
         template<typename return_type,
                 typename argument_type>
         class ccall : public std::enable_shared_from_this<ccall<return_type, argument_type>> {
-            friend class __gnu_cxx::new_allocator<ccall<return_type, argument_type>>;
-
             typedef typename function_type<return_type, argument_type>::type function_target;
             typedef typename normalized_function<function_target>::type normalized_target;
             typedef std::function<void(typename function_traits<normalized_target>::return_type)> on_result;
@@ -233,10 +231,15 @@ namespace vstd {
     template<typename return_type,
             typename argument_type>
     class future : public std::enable_shared_from_this<future<return_type, argument_type>> {
-        friend class __gnu_cxx::new_allocator<future<return_type, argument_type>>;
-
     public:
         typedef typename detail::function_type<return_type, argument_type>::type function;
+
+        explicit future(std::shared_ptr<detail::ccall<return_type, argument_type>> call, bool start = true) :
+                _call(call) {
+            if (start) {
+                _call->call();
+            }
+        }
 
         auto get() {
             return _call->getResult();
@@ -254,13 +257,6 @@ namespace vstd {
 
     private:
         std::shared_ptr<detail::ccall<return_type, argument_type>> _call;
-
-        explicit future(std::shared_ptr<detail::ccall<return_type, argument_type>> call, bool start = true) :
-                _call(call) {
-            if (start) {
-                _call->call();
-            }
-        }
 
         template<typename _return_type, typename _first_arg>
         auto chain_call(std::shared_ptr<detail::ccall<_return_type, _first_arg>> _new_call) {
