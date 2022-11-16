@@ -344,4 +344,9 @@ namespace vstd {
 
         return std::make_pair(to_add, to_remove);
     }
+
+    template<typename T=void>
+    auto square_ctn(auto w, auto h, auto x, auto y) {
+        return x < w && y < h && !(x < 0) && !(y < 0);
+    }
 }
