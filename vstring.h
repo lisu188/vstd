@@ -71,6 +71,13 @@ namespace vstd {
         return st.str();
     }
 
+    template<typename T, typename ...Args>
+    std::string str(T c, Args... args) {
+        std::stringstream st;
+        st << c;
+        return st.str() + vstd::str(args...);
+    }
+
     template<typename T=void>
     std::string str(const std::shared_ptr<stringable> &c) {
         return c->to_string();
@@ -101,7 +108,7 @@ namespace vstd {
     std::string join(Ctn list, const std::string &sep) {
         std::stringstream stream;
         unsigned int i = 0;
-        for (const std::string &str:list) {
+        for (const std::string &str: list) {
             stream << str;
             if (i++ != list.size() - 1) {
                 stream << sep;
