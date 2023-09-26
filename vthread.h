@@ -21,6 +21,8 @@ namespace vstd {
 
     extern std::function<void(std::function<void()>)> get_call_async_handler();
 
+    extern std::function<void(std::function<void()>)> get_call_now_handler();
+
     extern std::function<void(std::function<void()>)> get_call_later_block_handler();
 
     extern std::function<void(std::function<bool()>)> get_wait_until_handler();
@@ -39,6 +41,11 @@ namespace vstd {
     template<typename Function, typename... Arguments>
     void call_async(Function target, Arguments... args) {
         get_call_async_handler()(vstd::bind(target, args...));
+    }
+
+    template<typename Function, typename... Arguments>
+    void call_now(Function target, Arguments... args) {
+        get_call_now_handler()(vstd::bind(target, args...));
     }
 
     template<typename Function, typename... Arguments>

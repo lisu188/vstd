@@ -226,6 +226,13 @@ namespace vstd {
                     typename function_traits<func>::first_arg>>(
                     f, call_later<std::function<void() >>);
         }
+
+        template<typename func>
+        auto make_now(func f) {
+            return std::make_shared<ccall<typename function_traits<func>::return_type,
+                    typename function_traits<func>::first_arg>>(
+                    f, call_now<std::function<void() >>);
+        }
     }
 
     template<typename return_type,
@@ -284,6 +291,11 @@ namespace vstd {
     template<typename Func>
     auto async(Func f) {
         return detail::make_future(detail::make_async(vstd::make_function(f)));
+    }
+
+    template<typename Func>
+    auto now(Func f) {
+        return detail::make_future(detail::make_now(vstd::make_function(f)));
     }
 
     template<typename F, typename Arg=typename vstd::function_traits<F>::template arg<0>::type>
