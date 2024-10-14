@@ -44,13 +44,13 @@ namespace vstd {
 
     template<typename T=void>
     std::string ltrim(std::string s) {
-        s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not_fn(std::ptr_fun<int, int>(std::isspace))));
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not_fn<int(int)>(std::isspace)));
         return s;
     }
 
     template<typename T=void>
     std::string rtrim(std::string s) {
-        s.erase(std::find_if(s.rbegin(), s.rend(), std::not_fn(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
+        s.erase(std::find_if(s.rbegin(), s.rend(), std::not_fn<int(int)>(std::isspace)).base(), s.end());
         return s;
     }
 
@@ -71,7 +71,7 @@ namespace vstd {
         return st.str();
     }
 
-    template<typename T, typename ...Args>
+    template<typename T, typename... Args>
     std::string str(T c, Args... args) {
         std::stringstream st;
         st << c;
@@ -104,7 +104,7 @@ namespace vstd {
         return to_int(s).second;
     }
 
-    template<typename Ctn=std::list<std::string>>
+    template<typename Ctn=std::list<std::string> >
     std::string join(Ctn list, const std::string &sep) {
         std::stringstream stream;
         unsigned int i = 0;
