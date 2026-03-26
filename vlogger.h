@@ -14,24 +14,44 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <fstream>
+#include <memory>
+#include <mutex>
 #include "vdefines.h"
 #include "vstring.h"
 
 namespace vstd {
     class logger {
-        template<typename T, typename U, typename ...Args>
-        static void log(T t, U u, Args... args) {
-            std::stringstream stream;
-            stream << vstd::str(t) << " " << vstd::str(u);
-            log(stream.str(), args...);
-        }
-
-        template<typename T>
-        static void log(T t) {
-            std::cout << t << std::endl;
-        }
-
     public:
+        enum class sink {
+            stdout_sink,
+            stderr_sink,
+            file_sink,
+            disabled,
+        };
+
+        static void set_sink(sink target, const std::string &file_path = std::string()) {
+            std::lock_guard<std::mutex> guard(_mutex);
+            if (target == sink::file_sink) {
+                if (file_path.empty()) {
+                    target = sink::stderr_sink;
+                } else {
+                    auto stream = std::make_unique<std::ofstream>(file_path, std::ios::out | std::ios::app);
+                    if (!stream->is_open()) {
+                        std::cerr << "vstd::logger: failed to open log file " << file_path
+                                  << ", falling back to stderr" << std::endl;
+                        target = sink::stderr_sink;
+                    } else {
+                        _file_stream = std::move(stream);
+                        _current_sink = sink::file_sink;
+                        return;
+                    }
+                }
+            }
+            _file_stream.reset();
+            _current_sink = target;
+        }
+
         template<typename ...Args>
         static void fatal(Args... args) {
             log("FATAL:", args...);
@@ -56,6 +76,46 @@ namespace vstd {
         template<typename ...Args>
         static void debug(Args... args) {
             log("DEBUG:", args...);
+        }
+
+    private:
+        inline static sink _current_sink = sink::stdout_sink;
+        inline static std::unique_ptr<std::ofstream> _file_stream;
+        inline static std::mutex _mutex;
+
+        template<typename T, typename U, typename ...Args>
+        static void log(T t, U u, Args... args) {
+            std::stringstream stream;
+            stream << vstd::str(t) << " " << vstd::str(u);
+            log(stream.str(), args...);
+        }
+
+        template<typename T>
+        static void log(T t) {
+            std::stringstream stream;
+            stream << t;
+            write_line(stream.str());
+        }
+
+        static void write_line(const std::string &line) {
+            std::lock_guard<std::mutex> guard(_mutex);
+            switch (_current_sink) {
+            case sink::stdout_sink:
+                std::cout << line << std::endl;
+                break;
+            case sink::stderr_sink:
+                std::cerr << line << std::endl;
+                break;
+            case sink::file_sink:
+                if (_file_stream && _file_stream->is_open()) {
+                    (*_file_stream) << line << std::endl;
+                } else {
+                    std::cerr << line << std::endl;
+                }
+                break;
+            case sink::disabled:
+                break;
+            }
         }
     };
 }
