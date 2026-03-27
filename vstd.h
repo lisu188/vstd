@@ -39,11 +39,3 @@
 
 #endif
 
-#ifdef Py_PYTHON_H
-
-#include "vconverter.h"
-
-#endif
-
-
-
