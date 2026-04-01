@@ -26,9 +26,11 @@
 #include "vcast.h"
 
 namespace vstd {
+    // Returns an iterator to any element in the container (currently the first one),
+    // or container.end() when the container is empty.
     template<typename Container>
     auto any(Container &container) {
-        return *std::find_if(container.begin(), container.end(), [](auto it) { return true; });
+        return container.begin();
     }
 
     template<typename Container, typename Value>
@@ -56,15 +58,17 @@ namespace vstd {
         return std::find_if(container.begin(), container.end(), pred) != container.end();
     }
 
+    // Returns iterator to the first element matching predicate, or container.end() if not found.
     template<typename Container, typename Predicate>
     auto find_if(Container &container, Predicate predicate) {
-        return *std::find_if(container.begin(), container.end(), predicate);
+        return std::find_if(container.begin(), container.end(), predicate);
     }
 
     template<typename Container, typename Predicate, typename Callback>
     auto execute_if(Container &container, Predicate predicate, Callback callback) {
-        if (std::find_if(container.begin(), container.end(), predicate) != container.end()) {
-            callback(*std::find_if(container.begin(), container.end(), predicate));
+        auto it = vstd::find_if(container, predicate);
+        if (it != container.end()) {
+            callback(*it);
         }
     }
 
@@ -89,9 +93,34 @@ namespace vstd {
         }
     }
 
+    // Returns pointer to the element at index, or nullptr when index is invalid/out of bounds.
     template<typename Container>
-    auto get(Container &container, int index) {
-        return *std::next(container.begin(), index);
+    auto get(Container &container, int index) -> typename Container::value_type * {
+        if (index < 0) {
+            return nullptr;
+        }
+        int current = 0;
+        for (auto it = container.begin(); it != container.end(); ++it, ++current) {
+            if (current == index) {
+                return &(*it);
+            }
+        }
+        return nullptr;
+    }
+
+    // Returns const pointer to the element at index, or nullptr when index is invalid/out of bounds.
+    template<typename Container>
+    auto get(const Container &container, int index) -> const typename Container::value_type * {
+        if (index < 0) {
+            return nullptr;
+        }
+        int current = 0;
+        for (auto it = container.begin(); it != container.end(); ++it, ++current) {
+            if (current == index) {
+                return &(*it);
+            }
+        }
+        return nullptr;
     }
 
 
@@ -236,11 +265,15 @@ namespace vstd {
         return rand(0, max);
     };
 
+    // Returns iterator to a random element, or container.end() when the container is empty.
     template<typename Ctn>
-    auto random_element(Ctn ctn) {
+    auto random_element(Ctn &ctn) {
+        if (ctn.empty()) {
+            return ctn.end();
+        }
         auto iterator = ctn.begin();
         std::advance(iterator, vstd::rand(boost::size(ctn) - 1));
-        return *iterator;
+        return iterator;
     };
 
     template<typename Ctn>
@@ -256,7 +289,11 @@ namespace vstd {
             if (possible_values.empty()) {
                 break;
             }
-            int pow = vstd::random_element(possible_values);
+            auto random_it = vstd::random_element(possible_values);
+            if (random_it == possible_values.end()) {
+                break;
+            }
+            int pow = *random_it;
             returnValue.push_back(pow);
             value -= pow;
         }
