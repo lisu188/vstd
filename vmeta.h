@@ -12,14 +12,15 @@
 //TODO: line 36 optimize, do not use map
 #pragma once
 
-#include <boost/any.hpp>
+#include <any>
 #include <functional>
-#include <unordered_map>
 #include <memory>
+#include <typeindex>
+#include <unordered_map>
 #include "vany.h"
 #include "vbind.h"
 
-#define V_VOID boost::typeindex::type_id<void>()
+#define V_VOID std::type_index(typeid(void))
 
 #define V_STRING(X) #X
 
@@ -85,26 +86,26 @@ namespace vstd {
     public:
         virtual std::string name() = 0;
 
-        virtual boost::any invoke(std::vector<boost::any> args) = 0;
+        virtual std::any invoke(std::vector<std::any> args) = 0;
 
-        virtual boost::typeindex::type_index object_type() = 0;
+        virtual std::type_index object_type() = 0;
 
-        virtual boost::typeindex::type_index return_type() = 0;
+        virtual std::type_index return_type() = 0;
 
-        virtual std::list<boost::typeindex::type_index> argument_types() = 0;
+        virtual std::list<std::type_index> argument_types() = 0;
     };
 
     class property {
     public:
         virtual std::string name() = 0;
 
-        virtual boost::any get(boost::any object) = 0;
+        virtual std::any get(std::any object) = 0;
 
-        virtual void set(boost::any object, boost::any value) = 0;
+        virtual void set(std::any object, std::any value) = 0;
 
-        virtual boost::typeindex::type_index object_type() = 0;
+        virtual std::type_index object_type() = 0;
 
-        virtual boost::typeindex::type_index value_type() = 0;
+        virtual std::type_index value_type() = 0;
     };
 
     namespace detail {
@@ -144,7 +145,7 @@ namespace vstd {
             }
 
             //TODO: implement arguments and return type
-            boost::any invoke(std::vector<boost::any> args) override {
+            std::any invoke(std::vector<std::any> args) override {
                 return _call(_bind<0>(_func, args));
             }
 
@@ -152,7 +153,7 @@ namespace vstd {
             auto
             _call(F function, typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) {
                 function();
-                return boost::any();
+                return std::any();
             }
 
             template<typename F, typename T=ReturnType>
@@ -162,28 +163,28 @@ namespace vstd {
             }
 
             template<int argNo, typename F>
-            auto _bind(F function, std::vector<boost::any> args,
+            auto _bind(F function, std::vector<std::any> args,
                        typename vstd::disable_if<
                                argNo < vstd::tuple_size<ObjectType, ArgumentTypes...>::size - 1>::type * = 0) {
                 return _bind<argNo>(function, args[argNo]);
             }
 
             template<int argNo, typename F>
-            auto _bind(F function, std::vector<boost::any> args,
+            auto _bind(F function, std::vector<std::any> args,
                        typename vstd::enable_if<
                                argNo < vstd::tuple_size<ObjectType, ArgumentTypes...>::size - 1>::type * = 0) {
                 return _bind<argNo + 1>(_bind<argNo>(function, args[argNo]), args);
             }
 
             template<int argNo, typename F>
-            auto _bind(F function, boost::any arg, typename vstd::disable_if<argNo == 0>::type * = 0) {
+            auto _bind(F function, std::any arg, typename vstd::disable_if<argNo == 0>::type * = 0) {
                 return vstd::partial::bind(function,
                                            vstd::any_cast<typename vstd::tuple_element<argNo, ObjectType, ArgumentTypes...>::type>(
                                                    arg));
             }
 
             template<int argNo, typename F>
-            auto _bind(F function, boost::any arg, typename vstd::enable_if<argNo == 0>::type * = 0) {
+            auto _bind(F function, std::any arg, typename vstd::enable_if<argNo == 0>::type * = 0) {
                 return vstd::partial::bind(function, vstd::any_cast<std::shared_ptr<ObjectType >>(arg).get());
             }
 
@@ -192,27 +193,27 @@ namespace vstd {
                 return _name;
             }
 
-            boost::typeindex::type_index object_type() override {
-                return boost::typeindex::type_id<ObjectType>();
+            std::type_index object_type() override {
+                return std::type_index(typeid(ObjectType));
             }
 
-            boost::typeindex::type_index return_type() override {
-                return boost::typeindex::type_id<ReturnType>();
+            std::type_index return_type() override {
+                return std::type_index(typeid(ReturnType));
             }
 
-            std::list<boost::typeindex::type_index> argument_types() override {
+            std::list<std::type_index> argument_types() override {
                 return _argument_types();
             }
 
-            std::list<boost::typeindex::type_index> _argument_types() {
-                return std::list<boost::typeindex::type_index>();
+            std::list<std::type_index> _argument_types() {
+                return std::list<std::type_index>();
             }
 
             template<typename Arg, typename... Args>
-            std::list<boost::typeindex::type_index> argument_types(Arg arg, Args... props) {
-                std::list<boost::typeindex::type_index> ret;
-                ret.insert(boost::typeindex::type_id<Arg>());
-                for (boost::typeindex::type_index ind:argument_types<Args...>()) {
+            std::list<std::type_index> argument_types(Arg arg, Args... props) {
+                std::list<std::type_index> ret;
+                ret.push_back(std::type_index(typeid(Arg)));
+                for (std::type_index ind:argument_types<Args...>()) {
                     ret.push_back(ind);
                 }
                 return ret;
@@ -236,21 +237,21 @@ namespace vstd {
                 return _name;
             }
 
-            boost::any get(boost::any object) override {
+            std::any get(std::any object) override {
                 return _getter(vstd::any_cast<std::shared_ptr<ObjectType>>(object).get());
             }
 
-            void set(boost::any object, boost::any value) override {
+            void set(std::any object, std::any value) override {
                 _setter(vstd::any_cast<std::shared_ptr<ObjectType>>(object).get(),
                         vstd::any_cast<PropertyType>(value));
             }
 
-            boost::typeindex::type_index object_type() override {
-                return boost::typeindex::type_id<ObjectType>();
+            std::type_index object_type() override {
+                return std::type_index(typeid(ObjectType));
             }
 
-            boost::typeindex::type_index value_type() override {
-                return boost::typeindex::type_id<PropertyType>();
+            std::type_index value_type() override {
+                return std::type_index(typeid(PropertyType));
             }
         };
 
@@ -267,20 +268,20 @@ namespace vstd {
                 return _name;
             }
 
-            boost::any get(boost::any object) override {
-                return boost::any(_value);
+            std::any get(std::any object) override {
+                return std::any(_value);
             }
 
-            void set(boost::any object, boost::any value) override {
+            void set(std::any object, std::any value) override {
                 _value = vstd::any_cast<PropertyType>(value);
             }
 
-            boost::typeindex::type_index object_type() override {
-                return boost::typeindex::type_id<ObjectType>();
+            std::type_index object_type() override {
+                return std::type_index(typeid(ObjectType));
             }
 
-            boost::typeindex::type_index value_type() override {
-                return boost::typeindex::type_id<PropertyType>();
+            std::type_index value_type() override {
+                return std::type_index(typeid(PropertyType));
             }
         };
     }
@@ -413,14 +414,14 @@ namespace vstd {
 
         template<typename ObjectType, typename PropertyType>
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
-                                  typename vstd::disable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
+                                  typename vstd::disable_if<std::is_same<PropertyType, std::any>::value>::type * = 0) {
             return vstd::any_cast<PropertyType>(
                     _get_property_object<ObjectType, PropertyType>(t, prop)->get(t));
         }
 
         template<typename ObjectType, typename PropertyType>
         PropertyType get_property(std::string prop, std::shared_ptr<ObjectType> t,
-                                  typename vstd::enable_if<std::is_same<PropertyType, boost::any>::value>::type * = 0) {
+                                  typename vstd::enable_if<std::is_same<PropertyType, std::any>::value>::type * = 0) {
             return _get_property_object<ObjectType, PropertyType>(t, prop)->get(t);
         }
 
@@ -430,7 +431,7 @@ namespace vstd {
         }
 
         template<typename ObjectType>
-        boost::typeindex::type_index get_property_type(std::shared_ptr<ObjectType> ob, std::string name) {
+        std::type_index get_property_type(std::shared_ptr<ObjectType> ob, std::string name) {
             if (vstd::ctn(_props, name)) {
                 return _props[name]->value_type();
             } else if (vstd::ctn(ob->dynamic_props(), name)) {
@@ -438,7 +439,7 @@ namespace vstd {
             } else if (_super) {
                 return _super->get_property_type<ObjectType>(ob, name);
             }
-            return boost::typeindex::type_id<void>();
+            return std::type_index(typeid(void));
         }
 
         template<typename ObjectType>

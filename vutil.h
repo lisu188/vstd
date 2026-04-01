@@ -18,8 +18,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <boost/pool/pool_alloc.hpp>
-#include <boost/any.hpp>
 #include <queue>
+#include <typeindex>
 #include "vtraits.h"
 #include "vhash.h"
 #include "vcast.h"
@@ -101,7 +101,7 @@ namespace vstd {
 
     template<typename A, typename B>
     auto type_pair() {
-        return std::make_pair(boost::typeindex::type_id<A>(), boost::typeindex::type_id<B>());
+        return std::make_pair(std::type_index(typeid(A)), std::type_index(typeid(B)));
     }
 
     template<typename F, typename... Args>

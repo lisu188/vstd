@@ -14,6 +14,7 @@
 #include "vdefines.h"
 #include "vtraits.h"
 #include "vfunctional.h"
+#include <typeindex>
 
 namespace vstd {
     template<int a, int x>
@@ -83,17 +84,11 @@ namespace std {
     };
 
     template<>
-    struct hash<std::pair<boost::typeindex::type_index, boost::typeindex::type_index>> {
+    struct hash<std::pair<std::type_index, std::type_index>> {
         std::size_t operator()(
-                const std::pair<boost::typeindex::type_index, boost::typeindex::type_index> &pair) const {
+                const std::pair<std::type_index, std::type_index> &pair) const {
             return vstd::hash_combine(pair.first, pair.second);
         }
     };
 
-    template<>
-    struct hash<boost::typeindex::type_index> {
-        std::size_t operator()(const boost::typeindex::type_index &ind) const {
-            return ind.hash_code();
-        }
-    };
 }
