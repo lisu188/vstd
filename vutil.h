@@ -17,6 +17,7 @@
 #include <chrono>
 #include <mutex>
 #include <condition_variable>
+#include <stop_token>
 #include <boost/pool/pool_alloc.hpp>
 #include <boost/any.hpp>
 #include <queue>
@@ -165,25 +166,46 @@ namespace vstd {
         std::recursive_mutex d_mutex;
         std::condition_variable_any d_condition;
         Queue d_queue;
+        bool d_shutdown = false;
     public:
         typedef T value_type;
 
         void push(T value) {
             std::unique_lock<std::recursive_mutex> lock(d_mutex);
+            if (d_shutdown) {
+                return;
+            }
             d_queue.push(value);
             d_condition.notify_one();
         }
 
-        void pop(std::function<void(T)> callback) {
-            T value;
-            {
-                std::unique_lock<std::recursive_mutex> lock(d_mutex);
-                d_condition.wait(lock, [this]() {
-                    return !d_queue.empty();
-                });
-                value = vstd::pop(d_queue);
+        bool pop(T &value, std::stop_token stop_token = {}) {
+            std::unique_lock<std::recursive_mutex> lock(d_mutex);
+            std::stop_callback on_stop(stop_token, [this]() {
+                d_condition.notify_all();
+            });
+
+            d_condition.wait(lock, [this, &stop_token]() {
+                return !d_queue.empty() || d_shutdown || stop_token.stop_requested();
+            });
+
+            if (d_queue.empty()) {
+                return false;
             }
-            callback(value);
+
+            value = vstd::pop(d_queue);
+            return true;
+        }
+
+        void shutdown() {
+            std::unique_lock<std::recursive_mutex> lock(d_mutex);
+            d_shutdown = true;
+            d_condition.notify_all();
+        }
+
+        void reset() {
+            std::unique_lock<std::recursive_mutex> lock(d_mutex);
+            d_shutdown = false;
         }
     };
 

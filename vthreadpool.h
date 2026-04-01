@@ -12,16 +12,18 @@
 #pragma once
 
 #include <thread>
+#include <vector>
 
 namespace vstd {
     namespace detail {
         class worker_thread {
         public:
             template<typename thread_pool>
-            void operator()(std::shared_ptr<thread_pool> pool, std::shared_ptr<worker_thread> self) {
-                do {
-                    pool->_queue.pop(vstd::functional::call<std::function<void() >>);
-                } while (self.use_count() > 1);
+            void operator()(std::stop_token stop_token, std::shared_ptr<thread_pool> pool) {
+                std::function<void()> task;
+                while (pool->_queue.pop(task, stop_token)) {
+                    task();
+                }
             }
         };
     }
@@ -30,6 +32,10 @@ namespace vstd {
     class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_count, worker_thread>> {
         friend worker_thread;
     public:
+        ~thread_pool() {
+            stop();
+        }
+
         template<typename F, typename... Args>
         void execute(F f, Args... args) {
             _queue.push(vstd::bind(f, args...));
@@ -37,27 +43,42 @@ namespace vstd {
 
         std::shared_ptr<thread_pool> start() {
             std::unique_lock<std::recursive_mutex> lock(_worker_lock);
+            if (_started) {
+                return this->shared_from_this();
+            }
+            _queue.reset();
             while (_workers.size() < _worker_count) {
                 add_worker();
             }
+            _started = true;
             return this->shared_from_this();
+        }
+
+        void stop() {
+            std::vector<std::jthread> workers;
+            {
+                std::unique_lock<std::recursive_mutex> lock(_worker_lock);
+                if (!_started) {
+                    return;
+                }
+                _started = false;
+                _queue.shutdown();
+                for (auto &worker: _workers) {
+                    worker.request_stop();
+                }
+                workers = std::move(_workers);
+            }
+            workers.clear();
         }
 
     private:
         void add_worker() {
-            std::unique_lock<std::recursive_mutex> lock(_worker_lock);
-            auto worker = std::make_shared<worker_thread>();
-            _workers.insert(worker);
-            std::thread(*worker, this->shared_from_this(), worker).detach();
-        }
-
-        void del_worker() {
-            std::unique_lock<std::recursive_mutex> lock(_worker_lock);
-            _workers.erase(_workers.begin());
+            _workers.emplace_back(worker_thread(), this->shared_from_this());
         }
 
         vstd::blocking_queue<std::function<void() >> _queue;
-        std::set<std::shared_ptr<worker_thread>> _workers;
+        std::vector<std::jthread> _workers;
         std::recursive_mutex _worker_lock;
+        bool _started = false;
     };
 }
