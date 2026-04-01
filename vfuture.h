@@ -14,6 +14,8 @@
 #include <boost/range/adaptors.hpp>
 #include <mutex>
 #include <condition_variable>
+#include <optional>
+#include <stdexcept>
 #include "vutil.h"
 #include "vthread.h"
 
@@ -85,32 +87,14 @@ namespace vstd {
             typedef typename function_type<return_type, argument_type>::type function_target;
             typedef typename normalized_function<function_target>::type normalized_target;
             typedef std::function<void(typename function_traits<normalized_target>::return_type)> on_result;
+            using stored_return_type = typename std::conditional<std::is_void<return_type>::value, std::nullptr_t, return_type>::type;
+            using stored_argument_type = typename std::conditional<std::is_void<argument_type>::value, std::nullptr_t, argument_type>::type;
 
             volatile bool completed = false;
             std::recursive_mutex mutex;
             std::condition_variable_any _condition;
-            return_type *result = _new<return_type>();
-            argument_type *argument = _new<argument_type>();
-
-            template<typename X>
-            X *_new(typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
-                return new X();
-            }
-
-            template<typename X>
-            X *_new(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
-                return nullptr;
-            }
-
-            template<typename X>
-            void _delete(typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
-                delete result;
-            }
-
-            template<typename X>
-            void _delete(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
-
-            }
+            std::optional<stored_return_type> result;
+            std::optional<stored_argument_type> argument;
 
         public:
 
@@ -121,42 +105,39 @@ namespace vstd {
 
             }
 
-            ~ccall() {
+            template<typename X=argument_type>
+            X getArgument(typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                _delete<return_type>();
+                if (!argument.has_value()) {
+                    throw std::logic_error("argument is not set");
+                }
+                return std::move(*argument);
             }
 
             template<typename X=argument_type>
-            argument_type getArgument(typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
+            void getArgument(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                return *argument;
-            }
-
-            template<typename X=argument_type>
-            void *getArgument(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
-                std::unique_lock<std::recursive_mutex> lock(mutex);
-                return nullptr;
             }
 
             template<typename X=argument_type>
             void setArgument(X x, typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                *argument = x;
+                argument.emplace(std::move(x));
             }
 
             template<typename X=argument_type>
             void setArgument(void *, typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                argument = nullptr;
+                argument.emplace(nullptr);
             }
 
             template<typename X=return_type>
             void setResult(X t, typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                *result = t;
+                result.emplace(std::move(t));
                 completed = true;
                 if (_on_result) {
-                    _on_result(t);
+                    _on_result(*result);
                 }
                 _condition.notify_all();
             }
@@ -164,13 +145,14 @@ namespace vstd {
             template<typename X=return_type>
             X getResult(typename vstd::disable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                _condition.wait(lock, [this]() { return completed; });
-                return *result;
+                _condition.wait(lock, [this]() { return completed && result.has_value(); });
+                return std::move(*result);
             }
 
             template<typename X=return_type>
             void setResult(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
+                result.emplace(nullptr);
                 completed = true;
                 if (_on_result) {
                     _on_result(nullptr);
@@ -181,7 +163,7 @@ namespace vstd {
             template<typename X=return_type>
             void *getResult(typename vstd::enable_if<vstd::is_same<X, void>::value>::type * = 0) {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
-                _condition.wait(lock, [this]() { return completed; });
+                _condition.wait(lock, [this]() { return completed && result.has_value(); });
                 return nullptr;
             }
 
@@ -189,7 +171,12 @@ namespace vstd {
                 std::unique_lock<std::recursive_mutex> lock(mutex);
                 auto self = this->shared_from_this();
                 vstd::functional::call(_caller, [self]() {
-                    self->setResult(vstd::functional::call(self->_target, self->getArgument()));
+                    if constexpr (std::is_void<return_type>::value) {
+                        vstd::functional::call(self->_target, self->getArgument());
+                        self->setResult();
+                    } else {
+                        self->setResult(vstd::functional::call(self->_target, self->getArgument()));
+                    }
                 });
             }
 
