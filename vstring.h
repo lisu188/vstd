@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <list>
+#include <memory>
 #include <string>
 #include <sstream>
 #include <algorithm>
@@ -44,13 +45,17 @@ namespace vstd {
 
     template<typename T=void>
     std::string ltrim(std::string s) {
-        s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not_fn<int(int)>(std::isspace)));
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }));
         return s;
     }
 
     template<typename T=void>
     std::string rtrim(std::string s) {
-        s.erase(std::find_if(s.rbegin(), s.rend(), std::not_fn<int(int)>(std::isspace)).base(), s.end());
+        s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }).base(), s.end());
         return s;
     }
 
@@ -78,7 +83,6 @@ namespace vstd {
         return st.str() + vstd::str(args...);
     }
 
-    template<typename T=void>
     std::string str(const std::shared_ptr<stringable> &c) {
         return c->to_string();
     }
