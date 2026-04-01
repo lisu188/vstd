@@ -19,7 +19,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Boost 1.58 REQUIRED COMPONENTS system filesystem)
+find_package(Boost 1.58 REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
@@ -50,4 +50,4 @@ set(SOURCE_FILES
 
 add_executable(vstd ${SOURCE_FILES} main.cpp)
 
-target_link_libraries(vstd PRIVATE Boost::system Boost::filesystem Threads::Threads)
+target_link_libraries(vstd PRIVATE Boost::filesystem Threads::Threads)
