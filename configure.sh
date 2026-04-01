@@ -7,7 +7,7 @@ set -Eeuo pipefail
 #   1. Installs the system packages needed by the repo on Codex's Ubuntu-based image.
 #   2. Applies two compatibility fixes required by the current upstream sources:
 #        - vfunctional.h uses std::unordered_map without including <unordered_map>
-#        - CMakeLists.txt forces C++14 even though the code uses newer language features
+#        - CMakeLists.txt enforces C++23 so the project uses the newest standard supported by the Codex toolchain
 #   3. Runs a smoke build so the environment cache already contains a verified build tree.
 #
 # Optional knobs for debugging/local testing:
@@ -95,7 +95,7 @@ policy_block = 'if(POLICY CMP0167)\n  cmake_policy(SET CMP0167 NEW)\nendif()'
 if 'CMP0167' not in text:
     text = text.replace('project(vstd LANGUAGES CXX)', f'project(vstd LANGUAGES CXX)\n\n{policy_block}', 1)
 
-std_block = 'set(CMAKE_CXX_STANDARD 20)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)'
+std_block = 'set(CMAKE_CXX_STANDARD 23)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)'
 if 'CMAKE_CXX_STANDARD' not in text:
     text = re.sub(
         r'set\(CMAKE_CXX_FLAGS\s+"\$\{CMAKE_CXX_FLAGS\}\s*-std=c\+\+14"\)',
