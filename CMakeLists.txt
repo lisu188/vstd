@@ -18,10 +18,6 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 find_package(Boost 1.58 REQUIRED COMPONENTS system filesystem)
 find_package(Threads REQUIRED)
 
@@ -54,6 +50,9 @@ set(VSTD_HEADER_FILES
 )
 
 add_library(vstd INTERFACE)
+add_library(vstd::vstd ALIAS vstd)
+
+option(VSTD_BUILD_EXAMPLES "Build vstd example targets" ON)
 
 # Header-only target that propagates include dirs and required dependencies.
 target_include_directories(vstd
@@ -62,6 +61,8 @@ target_include_directories(vstd
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+target_compile_features(vstd INTERFACE cxx_std_23)
+
 target_link_libraries(vstd
   INTERFACE
     Boost::system
@@ -69,11 +70,15 @@ target_link_libraries(vstd
     Threads::Threads
 )
 
-add_executable(vstd_example main.cpp)
-target_link_libraries(vstd_example PRIVATE vstd)
+if(VSTD_BUILD_EXAMPLES)
+  add_executable(vstd_example main.cpp)
+  target_link_libraries(vstd_example PRIVATE vstd::vstd)
+endif()
 
 install(TARGETS vstd EXPORT vstdTargets)
-install(FILES ${VSTD_HEADER_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES ${VSTD_HEADER_FILES}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 install(EXPORT vstdTargets
   FILE vstdTargets.cmake
