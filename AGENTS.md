@@ -4,8 +4,10 @@
 
 - All C++ source/header files (`*.cpp`, `*.cc`, `*.cxx`, `*.h`, `*.hpp`) must be formatted with `clang-format`.
 - The canonical style is defined in the repository `.clang-format` file.
+- Formatting is mandatory before committing C++ changes; do not rely on reviewers or CI to fix formatting drift.
 - Before committing, run:
   - `cmake -S . -B build`
+  - `cmake --build build --target format`
   - `cmake --build build --target format-check`
 - If formatting drift is reported, fix it with:
   - `cmake --build build --target format`
