@@ -55,11 +55,19 @@ add_executable(vstd ${SOURCE_FILES} main.cpp)
 
 target_link_libraries(vstd PRIVATE Boost::filesystem Threads::Threads)
 
+enable_testing()
+
+add_executable(vmeta_tests tests/vmeta_tests.cpp)
+target_include_directories(vmeta_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vmeta_tests PRIVATE Boost::filesystem Threads::Threads)
+add_test(NAME vmeta_tests COMMAND vmeta_tests)
+
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
 if(CLANG_FORMAT_EXE)
     set(FORMAT_FILES
             ${SOURCE_FILES}
-            main.cpp)
+            main.cpp
+            tests/vmeta_tests.cpp)
 
     add_custom_target(format
             COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_FILES}
