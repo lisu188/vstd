@@ -21,19 +21,46 @@
 #include "vthread.h"
 #include "vutil.h"
 #include <boost/range/adaptors.hpp>
+#include <concepts>
 #include <condition_variable>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 namespace vstd
 {
 namespace detail
 {
-template <typename G, typename return_type = typename vstd::function_traits<G>::return_type,
-          typename argument_type = typename vstd::function_traits<G>::first_arg>
-auto normalize(G f, typename vstd::enable_if<std::is_void<return_type>::value>::type* = 0,
-               typename vstd::enable_if<std::is_void<argument_type>::value>::type* = 0)
+template <typename T>
+concept void_type = std::same_as<T, void>;
+template <typename T>
+concept non_void_type = !void_type<T>;
+
+template <typename G>
+concept future_callable = requires {
+    typename vstd::function_traits<G>::return_type;
+    typename vstd::function_traits<G>::first_arg;
+};
+
+template <typename G>
+concept returns_void = future_callable<G> && void_type<typename vstd::function_traits<G>::return_type>;
+
+template <typename G>
+concept returns_value = future_callable<G> && non_void_type<typename vstd::function_traits<G>::return_type>;
+
+template <typename G>
+concept takes_void = future_callable<G> && void_type<typename vstd::function_traits<G>::first_arg>;
+
+template <typename G>
+concept takes_value = future_callable<G> && non_void_type<typename vstd::function_traits<G>::first_arg>;
+
+template <future_callable G>
+    requires returns_void<G> && takes_void<G>
+auto normalize(G f)
 {
     return [f](void*) -> void*
     {
@@ -42,19 +69,18 @@ auto normalize(G f, typename vstd::enable_if<std::is_void<return_type>::value>::
     };
 }
 
-template <typename G, typename return_type = typename vstd::function_traits<G>::return_type,
-          typename argument_type = typename vstd::function_traits<G>::first_arg>
-auto normalize(G f, typename vstd::disable_if<std::is_void<return_type>::value>::type* = 0,
-               typename vstd::enable_if<std::is_void<argument_type>::value>::type* = 0)
+template <future_callable G>
+    requires returns_value<G> && takes_void<G>
+auto normalize(G f)
 {
     return [f](void*) { return f(); };
 }
 
-template <typename G, typename return_type = typename vstd::function_traits<G>::return_type,
-          typename argument_type = typename vstd::function_traits<G>::first_arg>
-auto normalize(G f, typename vstd::enable_if<std::is_void<return_type>::value>::type* = 0,
-               typename vstd::disable_if<std::is_void<argument_type>::value>::type* = 0)
+template <future_callable G>
+    requires returns_void<G> && takes_value<G>
+auto normalize(G f)
 {
+    using argument_type = typename vstd::function_traits<G>::first_arg;
     return [f](argument_type t) -> void*
     {
         f(t);
@@ -62,15 +88,14 @@ auto normalize(G f, typename vstd::enable_if<std::is_void<return_type>::value>::
     };
 }
 
-template <typename G, typename return_type = typename vstd::function_traits<G>::return_type,
-          typename argument_type = typename vstd::function_traits<G>::first_arg>
-auto normalize(G f, typename vstd::disable_if<std::is_void<return_type>::value>::type* = 0,
-               typename vstd::disable_if<std::is_void<argument_type>::value>::type* = 0)
+template <future_callable G>
+    requires returns_value<G> && takes_value<G>
+auto normalize(G f)
 {
     return f;
 }
 
-template <typename sig> struct normalized_function
+template <future_callable sig> struct normalized_function
 {
     typedef std::function<typename function_traits<decltype(normalize(std::declval<sig>()))>::return_type(
         typename function_traits<decltype(normalize(std::declval<sig>()))>::first_arg)>
@@ -93,10 +118,8 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     typedef typename function_type<return_type, argument_type>::type function_target;
     typedef typename normalized_function<function_target>::type normalized_target;
     typedef std::function<void(typename function_traits<normalized_target>::return_type)> on_result;
-    using stored_return_type =
-        typename std::conditional<std::is_void<return_type>::value, std::nullptr_t, return_type>::type;
-    using stored_argument_type =
-        typename std::conditional<std::is_void<argument_type>::value, std::nullptr_t, argument_type>::type;
+    using stored_return_type = std::conditional_t<void_type<return_type>, std::nullptr_t, return_type>;
+    using stored_argument_type = std::conditional_t<void_type<argument_type>, std::nullptr_t, argument_type>;
 
     volatile bool completed = false;
     std::recursive_mutex mutex;
@@ -105,10 +128,11 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     std::optional<stored_argument_type> argument;
 
   public:
-    template <typename F, typename G> ccall(F func, G caller) : _target(normalize(func)), _caller(caller) {}
+    template <future_callable F, typename G> ccall(F func, G caller) : _target(normalize(func)), _caller(caller) {}
 
     template <typename X = argument_type>
-    X getArgument(typename vstd::disable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires non_void_type<X>
+    X getArgument()
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         if (!argument.has_value())
@@ -119,27 +143,31 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     }
 
     template <typename X = argument_type>
-    void getArgument(typename vstd::enable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires void_type<X>
+    void getArgument()
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
     }
 
     template <typename X = argument_type>
-    void setArgument(X x, typename vstd::disable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires non_void_type<X>
+    void setArgument(X x)
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         argument.emplace(std::move(x));
     }
 
     template <typename X = argument_type>
-    void setArgument(void*, typename vstd::enable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires void_type<X>
+    void setArgument(void*)
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         argument.emplace(nullptr);
     }
 
     template <typename X = return_type>
-    void setResult(X t, typename vstd::disable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires non_void_type<X>
+    void setResult(X t)
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         result.emplace(std::move(t));
@@ -151,7 +179,9 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         _condition.notify_all();
     }
 
-    template <typename X = return_type> X getResult(typename vstd::disable_if<vstd::is_same<X, void>::value>::type* = 0)
+    template <typename X = return_type>
+        requires non_void_type<X>
+    X getResult()
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         _condition.wait(lock, [this]() { return completed && result.has_value(); });
@@ -159,7 +189,8 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     }
 
     template <typename X = return_type>
-    void setResult(typename vstd::enable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires void_type<X>
+    void setResult()
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         result.emplace(nullptr);
@@ -172,7 +203,8 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     }
 
     template <typename X = return_type>
-    void* getResult(typename vstd::enable_if<vstd::is_same<X, void>::value>::type* = 0)
+        requires void_type<X>
+    void* getResult()
     {
         std::unique_lock<std::recursive_mutex> lock(mutex);
         _condition.wait(lock, [this]() { return completed && result.has_value(); });
@@ -186,14 +218,15 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         vstd::functional::call(_caller,
                                [self]()
                                {
-                                   if constexpr (std::is_void<return_type>::value)
+                                   if constexpr (void_type<return_type>)
                                    {
-                                       vstd::functional::call(self->_target, self->getArgument());
+                                       vstd::functional::call(self->_target, self->getNormalizedArgument());
                                        self->setResult();
                                    }
                                    else
                                    {
-                                       self->setResult(vstd::functional::call(self->_target, self->getArgument()));
+                                       self->setResult(
+                                           vstd::functional::call(self->_target, self->getNormalizedArgument()));
                                    }
                                });
     }
@@ -212,6 +245,20 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     }
 
   private:
+    template <typename X = argument_type>
+        requires non_void_type<X>
+    X getNormalizedArgument()
+    {
+        return getArgument();
+    }
+
+    template <typename X = argument_type>
+        requires void_type<X>
+    void* getNormalizedArgument()
+    {
+        return nullptr;
+    }
+
     normalized_target _target;
 
     on_result _on_result;
@@ -222,21 +269,21 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
 
 namespace detail
 {
-template <typename func> auto make_async(func f)
+template <future_callable func> auto make_async(func f)
 {
     return std::make_shared<
         ccall<typename function_traits<func>::return_type, typename function_traits<func>::first_arg>>(
         f, call_async<std::function<void()>>);
 }
 
-template <typename func> auto make_later(func f)
+template <future_callable func> auto make_later(func f)
 {
     return std::make_shared<
         ccall<typename function_traits<func>::return_type, typename function_traits<func>::first_arg>>(
         f, call_later<std::function<void()>>);
 }
 
-template <typename func> auto make_now(func f)
+template <future_callable func> auto make_now(func f)
 {
     return std::make_shared<
         ccall<typename function_traits<func>::return_type, typename function_traits<func>::first_arg>>(
@@ -299,27 +346,29 @@ auto make_future(std::shared_ptr<detail::ccall<return_type, first_arg>> call)
 }
 } // namespace detail
 
-template <typename Func> auto later(Func f)
+template <detail::future_callable Func> auto later(Func f)
 {
     return detail::make_future(detail::make_later(vstd::make_function(f)));
 }
 
-template <typename Func> auto async(Func f)
+template <detail::future_callable Func> auto async(Func f)
 {
     return detail::make_future(detail::make_async(vstd::make_function(f)));
 }
 
-template <typename Func> auto now(Func f)
+template <detail::future_callable Func> auto now(Func f)
 {
     return detail::make_future(detail::make_now(vstd::make_function(f)));
 }
 
-template <typename F, typename Arg = typename vstd::function_traits<F>::template arg<0>::type> auto wrap_later(F f)
+template <detail::future_callable F, typename Arg = typename vstd::function_traits<F>::template arg<0>::type>
+auto wrap_later(F f)
 {
     return [f](Arg a) { return later(vstd::bind(f, a)); };
 }
 
-template <typename F, typename Arg = typename vstd::function_traits<F>::template arg<0>::type> auto wrap_async(F f)
+template <detail::future_callable F, typename Arg = typename vstd::function_traits<F>::template arg<0>::type>
+auto wrap_async(F f)
 {
     return [f](Arg a) { return async(vstd::bind(f, a)); };
 }
