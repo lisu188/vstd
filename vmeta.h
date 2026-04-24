@@ -789,23 +789,15 @@ template <typename Derived, typename Super> void register_meta_base_conversion()
 #define V_METHOD(...) VSTD_META_DISPATCH(V_METHOD, __VA_ARGS__)
 
 #define V_PROPERTY(CLASS, TYPE, NAME, GETTER, SETTER)                                                                  \
-    std::make_shared<vstd::detail::property_impl<CLASS, TYPE>>(V_STRING(NAME),                                         \
-                                                               static_cast<TYPE (CLASS::*)()>(&CLASS::GETTER),         \
-                                                               static_cast<void (CLASS::*)(TYPE)>(&CLASS::SETTER)),    \
+    std::make_shared<vstd::detail::property_impl<CLASS, TYPE>>(V_STRING(NAME), &CLASS::GETTER, &CLASS::SETTER),        \
         V_METHOD(CLASS, GETTER, TYPE), V_METHOD(CLASS, SETTER, void, TYPE)
 
-#define V_METHOD2(CLASS, NAME)                                                                                         \
-    std::make_shared<vstd::detail::method_impl<CLASS, void>>(V_STRING(NAME),                                           \
-                                                             static_cast<void (CLASS::*)()>(&CLASS::NAME))
+#define V_METHOD2(CLASS, NAME) std::make_shared<vstd::detail::method_impl<CLASS, void>>(V_STRING(NAME), &CLASS::NAME)
 #define V_METHOD3(CLASS, NAME, RET_TYPE)                                                                               \
-    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE>>(V_STRING(NAME),                                       \
-                                                                 static_cast<RET_TYPE (CLASS::*)()>(&CLASS::NAME))
+    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE>>(V_STRING(NAME), &CLASS::NAME)
 #define V_METHOD4(CLASS, NAME, RET_TYPE, ...)                                                                          \
-    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE, __VA_ARGS__>>(                                         \
-        V_STRING(NAME), static_cast<RET_TYPE (CLASS::*)(__VA_ARGS__)>(&CLASS::NAME))
+    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE, __VA_ARGS__>>(V_STRING(NAME), &CLASS::NAME)
 #define V_METHOD5(CLASS, NAME, RET_TYPE, ...)                                                                          \
-    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE, __VA_ARGS__>>(                                         \
-        V_STRING(NAME), static_cast<RET_TYPE (CLASS::*)(__VA_ARGS__)>(&CLASS::NAME))
+    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE, __VA_ARGS__>>(V_STRING(NAME), &CLASS::NAME)
 #define V_METHOD6(CLASS, NAME, RET_TYPE, ...)                                                                          \
-    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE, __VA_ARGS__>>(                                         \
-        V_STRING(NAME), static_cast<RET_TYPE (CLASS::*)(__VA_ARGS__)>(&CLASS::NAME))
+    std::make_shared<vstd::detail::method_impl<CLASS, RET_TYPE, __VA_ARGS__>>(V_STRING(NAME), &CLASS::NAME)
