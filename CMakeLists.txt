@@ -51,3 +51,22 @@ set(SOURCE_FILES
 add_executable(vstd ${SOURCE_FILES} main.cpp)
 
 target_link_libraries(vstd PRIVATE Boost::filesystem Threads::Threads)
+
+find_program(CLANG_FORMAT_EXE NAMES clang-format)
+if(CLANG_FORMAT_EXE)
+    set(FORMAT_FILES
+            ${SOURCE_FILES}
+            main.cpp)
+
+    add_custom_target(format
+            COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_FILES}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Formatting C++ sources with clang-format")
+
+    add_custom_target(format-check
+            COMMAND ${CLANG_FORMAT_EXE} --dry-run --Werror ${FORMAT_FILES}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Checking C++ formatting with clang-format")
+else()
+    message(STATUS "clang-format not found: 'format' and 'format-check' targets are unavailable")
+endif()
