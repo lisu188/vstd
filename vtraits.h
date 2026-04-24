@@ -18,9 +18,11 @@
  */
 #pragma once
 
-#include "vstd.h"
 #include "vtuple.h"
+#include <cstddef>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 namespace vstd
 {

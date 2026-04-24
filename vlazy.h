@@ -18,6 +18,8 @@
  */
 #pragma once
 
+#include <memory>
+
 namespace vstd
 {
 template <typename T> class lazy

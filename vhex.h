@@ -19,7 +19,11 @@
 #pragma once
 
 #include "vdefines.h"
+#include "vhash.h"
 #include <boost/algorithm/string.hpp>
+#include <memory>
+#include <sstream>
+#include <string>
 
 namespace vstd
 {

@@ -19,12 +19,12 @@
 #pragma once
 
 #include "vdefines.h"
-#include "vutil.h"
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <list>
@@ -33,6 +33,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace vstd
 {
@@ -89,7 +90,7 @@ template <typename T, typename... Args> std::string str(T c, Args... args)
     return st.str() + vstd::str(args...);
 }
 
-std::string str(const std::shared_ptr<stringable>& c)
+inline std::string str(const std::shared_ptr<stringable>& c)
 {
     return c->to_string();
 }
@@ -197,7 +198,7 @@ template <typename T = void> void add_line(std::string& org, const std::string& 
 
 template <typename T = void> std::string camel(std::string org)
 {
-    if (ctn(org, ' '))
+    if (org.find(' ') != std::string::npos)
     {
         std::string ret;
         for (const auto& str : split(org, ' '))

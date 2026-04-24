@@ -19,7 +19,9 @@
 #pragma once
 
 #include "vcast.h"
+#include "vfunctional.h"
 #include <boost/python.hpp>
+#include <functional>
 
 namespace vstd
 {

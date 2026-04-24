@@ -62,6 +62,30 @@ target_include_directories(vmeta_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(vmeta_tests PRIVATE Boost::filesystem Threads::Threads)
 add_test(NAME vmeta_tests COMMAND vmeta_tests)
 
+set(HEADER_SELF_SUFFICIENCY_FILES ${SOURCE_FILES})
+# vconverter.h depends on Boost.Python/Python development headers, which are not part of this target's configured deps.
+list(REMOVE_ITEM HEADER_SELF_SUFFICIENCY_FILES vconverter.h)
+
+set(HEADER_SELF_SUFFICIENCY_DIR ${CMAKE_CURRENT_BINARY_DIR}/header-self-sufficiency)
+file(MAKE_DIRECTORY ${HEADER_SELF_SUFFICIENCY_DIR})
+set(HEADER_SELF_SUFFICIENCY_SOURCES)
+foreach(HEADER_FILE IN LISTS HEADER_SELF_SUFFICIENCY_FILES)
+    string(MAKE_C_IDENTIFIER ${HEADER_FILE} HEADER_SYMBOL)
+    set(HEADER_SOURCE ${HEADER_SELF_SUFFICIENCY_DIR}/${HEADER_SYMBOL}.cpp)
+    file(WRITE ${HEADER_SOURCE}
+            "#include \"${CMAKE_CURRENT_SOURCE_DIR}/${HEADER_FILE}\"\nvoid header_check_${HEADER_SYMBOL}() {}\n")
+    list(APPEND HEADER_SELF_SUFFICIENCY_SOURCES ${HEADER_SOURCE})
+endforeach()
+
+set(HEADER_SELF_SUFFICIENCY_MAIN ${HEADER_SELF_SUFFICIENCY_DIR}/main.cpp)
+file(WRITE ${HEADER_SELF_SUFFICIENCY_MAIN} "int main() { return 0; }\n")
+list(APPEND HEADER_SELF_SUFFICIENCY_SOURCES ${HEADER_SELF_SUFFICIENCY_MAIN})
+
+add_executable(header_self_sufficiency_tests ${HEADER_SELF_SUFFICIENCY_SOURCES})
+target_include_directories(header_self_sufficiency_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(header_self_sufficiency_tests PRIVATE Boost::filesystem Threads::Threads)
+add_test(NAME header_self_sufficiency_tests COMMAND header_self_sufficiency_tests)
+
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
 if(CLANG_FORMAT_EXE)
     set(FORMAT_FILES
