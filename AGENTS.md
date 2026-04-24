@@ -14,3 +14,7 @@
 
 - Keep command output concise and focused on the task.
 - Do not use slow recursive shell patterns; prefer targeted `rg` queries.
+
+## Git branch naming
+
+- The default branch name has changed from `master` to `main`.
