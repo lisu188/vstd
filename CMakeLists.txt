@@ -41,12 +41,15 @@ set(SOURCE_FILES
         vtraits.h
         vutil.h
         vassert.h
+        vbind.h
+        vcache.h
         vstd.h
         vstring.h
         vmeta.h
         vneuro.h
         vany.h
-        vtuple.h)
+        vtuple.h
+        veventloop.h)
 
 add_executable(vstd ${SOURCE_FILES} main.cpp)
 

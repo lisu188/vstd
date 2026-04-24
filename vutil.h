@@ -21,16 +21,23 @@
 #include "vcast.h"
 #include "vhash.h"
 #include "vtraits.h"
+#include <algorithm>
 #include <boost/pool/pool_alloc.hpp>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
+#include <ctime>
+#include <functional>
+#include <iterator>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <random>
 #include <set>
 #include <stop_token>
 #include <typeindex>
+#include <utility>
 
 namespace vstd
 {
@@ -298,7 +305,7 @@ template <typename Ctn> auto random_element(Ctn& ctn)
         return ctn.end();
     }
     auto iterator = ctn.begin();
-    std::advance(iterator, vstd::rand(boost::size(ctn) - 1));
+    std::advance(iterator, vstd::rand(std::size(ctn) - 1));
     return iterator;
 };
 

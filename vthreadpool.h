@@ -18,7 +18,14 @@
  */
 #pragma once
 
+#include <condition_variable>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <stop_token>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace vstd
@@ -28,10 +35,11 @@ namespace detail
 class worker_thread
 {
   public:
-    template <typename thread_pool> void operator()(std::stop_token stop_token, std::shared_ptr<thread_pool> pool)
+    template <typename thread_pool_type>
+    void operator()(std::stop_token stop_token, std::shared_ptr<thread_pool_type> pool)
     {
         std::function<void()> task;
-        while (pool->_queue.pop(task, stop_token))
+        while (pool->pop_task(task, stop_token))
         {
             task();
         }
@@ -50,9 +58,9 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         stop();
     }
 
-    template <typename F, typename... Args> void execute(F f, Args... args)
+    template <typename F, typename... Args> void execute(F&& f, Args&&... args)
     {
-        _queue.push(vstd::bind(f, args...));
+        push_task(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
     }
 
     std::shared_ptr<thread_pool> start()
@@ -62,7 +70,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         {
             return this->shared_from_this();
         }
-        _queue.reset();
+        reset_queue();
         while (_workers.size() < _worker_count)
         {
             add_worker();
@@ -81,7 +89,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
                 return;
             }
             _started = false;
-            _queue.shutdown();
+            shutdown_queue();
             for (auto& worker : _workers)
             {
                 worker.request_stop();
@@ -97,9 +105,54 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         _workers.emplace_back(worker_thread(), this->shared_from_this());
     }
 
-    vstd::blocking_queue<std::function<void()>> _queue;
+    void push_task(std::function<void()> task)
+    {
+        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
+        if (_queue_shutdown)
+        {
+            return;
+        }
+        _queue.push(std::move(task));
+        _queue_condition.notify_one();
+    }
+
+    bool pop_task(std::function<void()>& task, std::stop_token stop_token)
+    {
+        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
+        std::stop_callback on_stop(stop_token, [this]() { _queue_condition.notify_all(); });
+
+        _queue_condition.wait(lock, [this, &stop_token]()
+                              { return !_queue.empty() || _queue_shutdown || stop_token.stop_requested(); });
+
+        if (_queue.empty())
+        {
+            return false;
+        }
+
+        task = std::move(_queue.front());
+        _queue.pop();
+        return true;
+    }
+
+    void shutdown_queue()
+    {
+        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
+        _queue_shutdown = true;
+        _queue_condition.notify_all();
+    }
+
+    void reset_queue()
+    {
+        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
+        _queue_shutdown = false;
+    }
+
+    std::queue<std::function<void()>> _queue;
+    std::recursive_mutex _queue_lock;
+    std::condition_variable_any _queue_condition;
     std::vector<std::jthread> _workers;
     std::recursive_mutex _worker_lock;
+    bool _queue_shutdown = false;
     bool _started = false;
 };
 } // namespace vstd
