@@ -149,12 +149,12 @@ template <typename ObjectType, typename ReturnType, typename... ArgumentTypes> c
     {
     }
 
-    template<typename T=ReturnType>
-            method_impl(std::string name,
-                        typename vstd::enable_if<vstd::is_same<T, void>::value>::type * = 0) :
-                    _name(name), _func([](ObjectType *, ArgumentTypes...) {
+    template <typename T = ReturnType>
+    method_impl(std::string name, typename vstd::enable_if<vstd::is_same<T, void>::value>::type* = 0)
+        : _name(name), _func(
+                           [](ObjectType*, ArgumentTypes...) {
 
-            })
+                           })
     {
     }
 

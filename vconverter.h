@@ -55,8 +55,7 @@ template <typename Ret, typename... Args> struct builder
         boost::python::object func =
             boost::python::object(boost::python::handle<>(boost::python::borrowed(boost::python::incref(obj_ptr))));
         new (storage) std::function<R(Args...)>(
-            [func](Args... args)
-            {
+            [func](Args... args) {
                 return R(vstd::functional::call(
                     boost::python::extract<ptr_type>(boost::python::incref(func(args...).ptr()))));
             });

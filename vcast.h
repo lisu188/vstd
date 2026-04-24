@@ -20,6 +20,8 @@
 
 #include "vdefines.h"
 #include "vtraits.h"
+#include <memory>
+#include <type_traits>
 
 namespace vstd
 {
