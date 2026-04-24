@@ -20,9 +20,7 @@
 #include <set>
 #include <unordered_map>
 
-#include "vdefines.h"
 #include "vtraits.h"
-#include "vutil.h"
 
 namespace vstd
 {
@@ -90,7 +88,7 @@ template <typename Return, typename Container, typename Func> auto map_reduce(Co
     for (auto val : container)
     {
         auto bucket = f(val);
-        if (!ctn(ret, bucket))
+        if (ret.find(bucket) == ret.end())
         {
             ret[bucket] = std::set<typename Container::value_type>();
         }

@@ -18,6 +18,7 @@
  */
 #pragma once
 
+#include "vfunctional.h"
 #include "vthread.h"
 #include "vutil.h"
 #include <boost/range/adaptors.hpp>

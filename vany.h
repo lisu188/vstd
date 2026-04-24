@@ -19,10 +19,11 @@
 #pragma once
 
 #include "vcast.h"
-#include "vutil.h"
 #include <any>
+#include <functional>
 #include <typeindex>
 #include <unordered_map>
+#include <utility>
 
 namespace vstd
 {
@@ -41,7 +42,7 @@ std::unordered_map<std::pair<std::type_index, std::type_index>, std::function<st
 template <typename T> T any_cast(std::any val)
 {
     auto key = std::pair<std::type_index, std::type_index>(std::type_index(typeid(T)), std::type_index(val.type()));
-    if (vstd::ctn(detail::registry(), key))
+    if (detail::registry().find(key) != detail::registry().end())
     {
         return std::any_cast<T>(detail::registry()[key](val));
     }
@@ -50,7 +51,7 @@ template <typename T> T any_cast(std::any val)
 
 template <typename T, typename U> void register_any_type()
 {
-    detail::registry()[vstd::type_pair<T, U>()] = [](std::any conv)
+    detail::registry()[std::make_pair(std::type_index(typeid(T)), std::type_index(typeid(U)))] = [](std::any conv)
     { return std::any(vstd::cast<T>(std::any_cast<U>(conv))); };
 };
 } // namespace vstd

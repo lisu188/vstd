@@ -18,10 +18,12 @@
  */
 #pragma once
 
-#include "vdefines.h"
-#include "vfunctional.h"
 #include "vtraits.h"
+#include <cstddef>
+#include <functional>
+#include <string>
 #include <typeindex>
+#include <utility>
 
 namespace vstd
 {

@@ -18,6 +18,14 @@
  */
 #pragma once
 
+#if __has_include(<SDL2/SDL.h>)
+#include <SDL2/SDL.h>
+#elif __has_include(<SDL.h>)
+#include <SDL.h>
+#endif
+
+#ifdef SDL_h_
+
 #include "vfuture.h"
 #include <condition_variable>
 #include <functional>
@@ -220,3 +228,5 @@ template <typename T = void> class event_loop
     }
 };
 } // namespace vstd
+
+#endif
