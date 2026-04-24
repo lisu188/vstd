@@ -27,7 +27,7 @@
 #include <functional>
 #include <cctype>
 #include <locale>
-#include <boost/filesystem.hpp>
+#include <filesystem>
 #include <boost/algorithm/string.hpp>
 #include <utility>
 #include "vdefines.h"
@@ -141,7 +141,7 @@ template <typename T = void> wchar_t **to_wchar(int size, const char **text) {
 }
 
 template <typename T = void> std::string stem(const std::string &script) {
-    return boost::filesystem::path(script).stem().string();
+    return std::filesystem::path(script).stem().string();
 }
 
 template <typename T = void> void add_line(std::string &org, const std::string &_new) {
