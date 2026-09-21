@@ -12,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y clang-format libboost-filesystem-dev
+      - run: python3 scripts/vmeta_bootstrap.py
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - run: cmake --build build --target format
       - run: cmake --build build --target format-check
@@ -23,7 +24,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os, pathlib, subprocess
-          paths = ['vany.h', 'vmeta.h', 'vhash.h', 'tests/vmeta_regressions.cpp', 'tests/vmeta_allocations.cpp']
+          paths = ['vany.h', 'vmeta.h', 'vhash.h', 'tests/vmeta_regressions.cpp', 'tests/vmeta_allocations.cpp', 'CMakeLists.txt']
           entries = []
           for path in paths:
               payload = json.dumps({'content': pathlib.Path(path).read_text(), 'encoding': 'utf-8'})
