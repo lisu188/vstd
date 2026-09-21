@@ -125,8 +125,10 @@ small algorithmic/data-structure conveniences.
   registration, getter/setter/method metadata, dynamic property access).
 
 - **`vneuro.h`**  
-  Neural-network-oriented experimental module containing training/test data and
-  matrix-based learning internals.
+  Deterministic feed-forward neural network with contiguous RAII storage, Xavier
+  initialization, sigmoid activations, momentum SGD, bounded training, prediction,
+  RMSE reporting, and numerical gradient checking. Legacy training entry points remain
+  available as compatibility wrappers; see `docs/vneuro.md`.
 
 ## Typical include patterns
 

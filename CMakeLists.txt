@@ -67,6 +67,21 @@ else()
     target_compile_options(vmeta_tests PRIVATE -UNDEBUG)
 endif()
 
+add_executable(vneuro_tests tests/vneuro_tests.cpp)
+target_include_directories(vneuro_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME vneuro_tests COMMAND vneuro_tests)
+if(MSVC)
+    target_compile_options(vneuro_tests PRIVATE /UNDEBUG)
+else()
+    target_compile_options(vneuro_tests PRIVATE -UNDEBUG)
+endif()
+
+option(VSTD_BUILD_BENCHMARKS "Build vstd benchmarks" OFF)
+if(VSTD_BUILD_BENCHMARKS)
+    add_executable(vneuro_bench benchmarks/vneuro_bench.cpp)
+    target_include_directories(vneuro_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+
 foreach(TEST_NAME vmeta_regressions vmeta_allocations)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -105,7 +120,9 @@ if(CLANG_FORMAT_EXE)
             main.cpp
             tests/vmeta_tests.cpp
             tests/vmeta_regressions.cpp
-            tests/vmeta_allocations.cpp)
+            tests/vmeta_allocations.cpp
+            tests/vneuro_tests.cpp
+            benchmarks/vneuro_bench.cpp)
 
     add_custom_target(format
             COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_FILES}
