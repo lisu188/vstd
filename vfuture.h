@@ -345,27 +345,27 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         auto self = this->shared_from_this();
         try
         {
-            vstd::functional::call(_caller,
-                                   [self]()
-                                   {
-                                       try
-                                       {
-                                           if constexpr (void_type<return_type>)
-                                           {
-                                               vstd::functional::call(self->_target, self->getNormalizedArgument());
-                                               self->setResult();
-                                           }
-                                           else
-                                           {
-                                               self->setResult(vstd::functional::call(self->_target,
-                                                                                      self->getNormalizedArgument()));
-                                           }
-                                       }
-                                       catch (...)
-                                       {
-                                           self->setException(std::current_exception());
-                                       }
-                                   });
+            vstd::functional::call(
+                _caller,
+                [self]()
+                {
+                    try
+                    {
+                        if constexpr (void_type<return_type>)
+                        {
+                            vstd::functional::call(self->_target, self->getNormalizedArgument());
+                            self->setResult();
+                        }
+                        else
+                        {
+                            self->setResult(vstd::functional::call(self->_target, self->getNormalizedArgument()));
+                        }
+                    }
+                    catch (...)
+                    {
+                        self->setException(std::current_exception());
+                    }
+                });
         }
         catch (...)
         {
