@@ -264,10 +264,15 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         connectEventCallback(function).release();
     }
 
+    std::size_t runPostedTasks()
+    {
+        return drainPostedTasks();
+    }
+
     std::size_t runReady()
     {
         std::size_t processed = 0;
-        processed += drainPostedTasks();
+        processed += runPostedTasks();
         processed += pollEvents();
         processed += processConditions();
         processed += processDelays();
