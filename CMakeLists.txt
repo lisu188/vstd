@@ -122,6 +122,7 @@ if(CLANG_FORMAT_EXE)
             tests/vmeta_regressions.cpp
             tests/vmeta_allocations.cpp
             tests/vneuro_tests.cpp
+            tests/vfuture_regressions.cpp
             benchmarks/vneuro_bench.cpp)
 
     add_custom_target(format
