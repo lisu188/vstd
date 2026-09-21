@@ -205,8 +205,8 @@ template <typename T = void> class neuro
                 const double minus = sample_loss(input, expected);
                 weights_[layer].data[index] = original;
                 const double numerical = (plus - minus) / (2.0 * epsilon);
-                max_relative_error = std::max(max_relative_error,
-                                              relative_error(analytical.weights[layer].data[index], numerical));
+                max_relative_error =
+                    std::max(max_relative_error, relative_error(analytical.weights[layer].data[index], numerical));
             }
 
             for (std::size_t index = 0; index < biases_[layer].size(); ++index)
@@ -424,8 +424,7 @@ template <typename T = void> class neuro
                 {
                     propagated += weights_[layer](next, index) * deltas[layer][next];
                 }
-                deltas[current][index] =
-                    propagated * sigmoid_derivative_from_output(activations[current + 1][index]);
+                deltas[current][index] = propagated * sigmoid_derivative_from_output(activations[current + 1][index]);
             }
         }
 
