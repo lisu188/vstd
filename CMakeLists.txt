@@ -82,7 +82,7 @@ if(VSTD_BUILD_BENCHMARKS)
     target_include_directories(vneuro_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
-foreach(TEST_NAME vmeta_regressions vmeta_allocations)
+foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${TEST_NAME} PRIVATE Threads::Threads)
