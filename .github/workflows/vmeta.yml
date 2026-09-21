@@ -1,4 +1,4 @@
-name: vmeta
+name: vstd
 on:
   pull_request:
   push:
@@ -16,8 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y clang clang-format libboost-filesystem-dev
-      - run: clang-format --dry-run --Werror vany.h vmeta.h vhash.h tests/vmeta_regressions.cpp tests/vmeta_allocations.cpp
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+      - run: cmake --build build --target format-check
       - run: cmake --build build -j2
       - run: ctest --test-dir build --output-on-failure
   sanitizers:
@@ -33,6 +33,12 @@ jobs:
         run: sudo sysctl vm.mmap_rnd_bits=28
       - run: g++ -std=c++23 -O1 -g -pthread -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/vmeta_regressions.cpp -o vmeta-sanitized
       - run: ./vmeta-sanitized
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          TSAN_OPTIONS: halt_on_error=1
+      - run: g++ -std=c++23 -O1 -g -pthread -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/vneuro_tests.cpp -o vneuro-sanitized
+      - run: ./vneuro-sanitized
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
