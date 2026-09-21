@@ -37,7 +37,8 @@ std::function<void(std::function<void()>)> get_call_later_handler()
 
 std::function<void(std::function<void()>)> get_call_async_handler()
 {
-    return [](std::function<void()> function) {
+    return [](std::function<void()> functio
+    ) {
         static auto pool = std::make_shared<vstd::thread_pool<2>>()->start();
         pool->execute(std::move(function));
     };
@@ -55,7 +56,8 @@ std::function<void(std::function<void()>)> get_call_later_block_handler()
 
 std::function<void(std::function<bool()>)> get_wait_until_handler()
 {
-    return [](std::function<bool()> predicate) {
+    return [](std::function<bool()> predicat
+    ) {
         while (!predicate())
         {
             std::this_thread::yield();
@@ -65,7 +67,8 @@ std::function<void(std::function<bool()>)> get_wait_until_handler()
 
 std::function<void(std::function<bool()>, std::function<void()>)> get_call_when_handler()
 {
-    return [](std::function<bool()> predicate, std::function<void()> function) {
+    return [](std::function<bool()> predicate, std::function<void()> functio
+    ) {
         if (predicate())
         {
             function();
