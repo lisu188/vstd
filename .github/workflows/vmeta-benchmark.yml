@@ -23,8 +23,8 @@ jobs:
         shell: bash
         run: |
           cat > benchmark.cpp <<'CPP'
-          #include "vhash.h"
-          #include "vmeta.h"
+          #include <vhash.h>
+          #include <vmeta.h>
           #include <chrono>
           #include <cstdint>
           #include <cstdlib>
@@ -159,7 +159,7 @@ jobs:
               'cpu_affinity': cpu, 'flags': flags,
               'iterations_per_timing_sample': iterations, 'repetitions': repetitions,
               'warmup_calls_per_case': 20000, 'allocation_sample_calls': 10000,
-              'compiler_versions': {}, 'compile_seconds': {},
+              'compiler_versions': {}, 'compile_seconds': {}, 'header_dependencies': {},
           }
           rows = []
           for compiler in ('g++', 'clang++'):
@@ -170,6 +170,14 @@ jobs:
                   actual = subprocess.check_output(['git', '-C', str(include), 'rev-parse', 'HEAD'], text=True).strip()
                   if actual != revisions[revision]:
                       raise RuntimeError(f'Revision mismatch: {actual}')
+                  dependencies = subprocess.check_output([compiler, *flags, '-I' + str(include), '-MM', str(source)], text=True)
+                  dependency_paths = dependencies.replace('\\\n', ' ').split()[1:]
+                  for header in ('vmeta.h', 'vany.h', 'vhash.h'):
+                      selected = {str(pathlib.Path(path).resolve()) for path in dependency_paths if pathlib.Path(path).name == header}
+                      if selected != {str(include / header)}:
+                          raise RuntimeError(f'Header contamination: {compiler} {revision} {header}: {selected}')
+                  environment['header_dependencies'][compiler + '/' + revision] = dependencies
+                  print('VERIFIED_HEADERS', compiler, revision, dependencies, flush=True)
                   executable = output / (compiler.replace('+', 'p') + '-' + revision)
                   command = [compiler, *flags, '-I' + str(include), str(source), '-o', str(executable)]
                   print('COMMAND', ' '.join(command), flush=True)
@@ -229,7 +237,7 @@ jobs:
           print('SAMPLES_CSV_BEGIN')
           print((output / 'samples.csv').read_text())
           print('SAMPLES_CSV_END')
-          markdown = ['# vmeta before/after benchmark', '', 'One runner; pinned revisions; nine alternating samples of 1,000,000 calls; 20,000 warmup calls per case. Allocation counts are separately sampled over 10,000 calls. Optimized C++23, -O2 -DNDEBUG, no LTO or sanitizers. Both compilers use libstdc++. Not a game FPS benchmark.', '', '| Compiler | Case | Before ns | After ns | Speedup | Allocations/call before | After |', '|---|---|---:|---:|---:|---:|---:|']
+          markdown = ['# vmeta before/after benchmark', '', 'One runner; pinned revisions and compiler-verified header dependencies; nine alternating samples of 1,000,000 calls; 20,000 warmup calls per case. Allocation counts are separately sampled over 10,000 calls. Optimized C++23, -O2 -DNDEBUG, no LTO or sanitizers. Both compilers use libstdc++. Not a game FPS benchmark. Run 35644722769 is invalid because its quote includes resolved to the root checkout; this run corrects and verifies that isolation.', '', '| Compiler | Case | Before ns | After ns | Speedup | Allocations/call before | After |', '|---|---|---:|---:|---:|---:|---:|']
           for item in summary:
               markdown.append(f"| {item['compiler']} | {item['case']} | {item['before']['median_ns']:.2f} | {item['after']['median_ns']:.2f} | {item['speedup']:.2f}x | {item['before']['allocations_per_call']:.0f} | {item['after']['allocations_per_call']:.0f} |")
           report = '\n'.join(markdown) + '\n'
