@@ -27,205 +27,595 @@
 #ifdef SDL_h_
 
 #include "vfuture.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <cstddef>
+#include <exception>
 #include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <vector>
 
 namespace vstd
 {
-template <typename T = void> class event_loop
+template <typename T = void> class event_loop : public std::enable_shared_from_this<event_loop<T>>
 {
-    struct DelayCompare
+    using clock = std::chrono::steady_clock;
+
+    struct delayed_task
     {
-        bool operator()(const std::pair<int, std::function<void()>>& a, std::pair<int, std::function<void()>> b)
+        clock::time_point due;
+        std::size_t id;
+        std::function<void()> function;
+        std::shared_ptr<std::atomic_bool> cancelled;
+    };
+
+    struct delay_compare
+    {
+        bool operator()(const delayed_task& a, const delayed_task& b) const
         {
-            return std::greater<int>()(a.first, b.first);
+            return a.due > b.due;
         }
     };
 
-    int lastFrameTime = SDL_GetTicks();
-    Uint32 _call_function_event = SDL_RegisterEvents(1);
-    std::thread::id _main_thread_id = std::this_thread::get_id();
-
-    std::priority_queue<std::pair<int, std::function<void()>>, std::vector<std::pair<int, std::function<void()>>>,
-                        DelayCompare>
-        delayQueue;
-    std::list<std::pair<std::function<bool()>, std::function<void()>>> conditionalQueue;
-
-    std::list<std::function<void(int)>> frameCallbackList;
-    std::list<std::function<bool(SDL_Event*)>> eventCallbackList;
+    struct conditional_task
+    {
+        std::size_t id;
+        std::function<bool()> predicate;
+        std::function<void()> function;
+        std::shared_ptr<std::atomic_bool> cancelled;
+    };
 
   public:
+    class connection
+    {
+      public:
+        connection() = default;
+        explicit connection(std::function<void()> disconnect) : disconnectFunction(std::move(disconnect)) {}
+        connection(const connection&) = delete;
+        connection& operator=(const connection&) = delete;
+        connection(connection&& other) noexcept : disconnectFunction(std::move(other.disconnectFunction)) {}
+        connection& operator=(connection&& other) noexcept
+        {
+            if (this != &other)
+            {
+                reset();
+                disconnectFunction = std::move(other.disconnectFunction);
+            }
+            return *this;
+        }
+        ~connection()
+        {
+            reset();
+        }
+
+        void reset()
+        {
+            if (disconnectFunction)
+            {
+                auto disconnect = std::move(disconnectFunction);
+                disconnect();
+            }
+        }
+
+        void release()
+        {
+            disconnectFunction = {};
+        }
+
+        explicit operator bool() const
+        {
+            return static_cast<bool>(disconnectFunction);
+        }
+
+      private:
+        std::function<void()> disconnectFunction;
+    };
+
     static std::shared_ptr<event_loop> instance()
     {
-        static std::shared_ptr<vstd::event_loop<>> _loop = std::make_shared<vstd::event_loop<>>();
-        return _loop;
+        static std::shared_ptr<event_loop> loop = std::make_shared<event_loop>();
+        return loop;
     }
 
-    void invoke(const std::function<void()>& f)
+    bool invoke(const std::function<void()>& function)
     {
-        SDL_Event event;
-        SDL_zero(event);
-        event.type = _call_function_event;
-        event.user.data1 = new std::function<void()>(f);
-        SDL_PushEvent(&event);
-    }
-
-    void invoke_when(const std::function<bool()>& pred, const std::function<void()>& func)
-    {
-        invoke([=, this]() { conditionalQueue.emplace_back(pred, func); });
-    }
-
-    void await(const std::function<void()>& f)
-    {
-        if (std::this_thread::get_id() == _main_thread_id)
+        try
         {
-            f();
+            {
+                std::lock_guard lock(taskMutex);
+                taskQueue.push(function);
+            }
+            wake();
+            return true;
         }
-        else
+        catch (...)
         {
-            std::recursive_mutex _mutex;
-            std::unique_lock<std::recursive_mutex> _lock(_mutex);
-            bool completed = false;
-            std::condition_variable_any _condition;
-            invoke(
-                [&]()
+            reportException(std::current_exception());
+            return false;
+        }
+    }
+
+    void invoke_when(const std::function<bool()>& predicate, const std::function<void()>& function)
+    {
+        scheduleWhen(predicate, function).release();
+    }
+
+    connection scheduleWhen(const std::function<bool()>& predicate, const std::function<void()>& function)
+    {
+        const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
+        auto cancelled = std::make_shared<std::atomic_bool>(false);
+        {
+            std::lock_guard lock(conditionalMutex);
+            conditionalQueue.push_back({id, predicate, function, cancelled});
+        }
+        wake();
+        return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
+    }
+
+    void await(const std::function<void()>& function)
+    {
+        if (isMainThread())
+        {
+            function();
+            return;
+        }
+
+        std::mutex mutex;
+        std::unique_lock lock(mutex);
+        bool completed = false;
+        std::exception_ptr error;
+        if (!invoke([&]() {
+                try
                 {
-                    std::unique_lock<std::recursive_mutex> __lock(_mutex);
-                    f();
+                    function();
+                }
+                catch (...)
+                {
+                    error = std::current_exception();
+                }
+                {
+                    std::lock_guard completionLock(mutex);
                     completed = true;
-                    _condition.notify_all();
-                });
-            _condition.wait(_lock, [&]() { return completed; });
-        }
-    }
-
-    void delay(int t, const std::function<void()>& f)
-    {
-        if (std::this_thread::get_id() == _main_thread_id)
+                }
+                condition.notify_all();
+            }))
         {
-            delayQueue.push(std::make_pair(SDL_GetTicks() + t, f));
+            throw std::runtime_error("failed to schedule event-loop task");
         }
-        else
+        condition.wait(lock, [&]() { return completed; });
+        if (error)
         {
-            vstd::later([=, this]() { delayQueue.push(std::make_pair(SDL_GetTicks() + t, f)); });
+            std::rethrow_exception(error);
         }
     }
 
-    void registerFrameCallback(const std::function<void(int)>& f)
+    void delay(int milliseconds, const std::function<void()>& function)
     {
-        frameCallbackList.push_back(f);
+        scheduleAfter(milliseconds, function).release();
     }
 
-    void registerEventCallback(const std::function<bool(SDL_Event*)>& f)
+    connection scheduleAfter(int milliseconds, const std::function<void()>& function)
     {
-        eventCallbackList.push_back(f);
+        const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
+        auto cancelled = std::make_shared<std::atomic_bool>(false);
+        const auto due = clock::now() + std::chrono::milliseconds(std::max(milliseconds, 0));
+        {
+            std::lock_guard lock(delayMutex);
+            delayQueue.push({due, id, function, cancelled});
+        }
+        wake();
+        return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
+    }
+
+    connection connectFrameCallback(const std::function<void(int)>& function)
+    {
+        const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard lock(callbackMutex);
+            frameCallbackList.emplace_back(id, function);
+        }
+        std::weak_ptr<event_loop> weakLoop = this->weak_from_this();
+        return connection([weakLoop, id]() {
+            if (auto loop = weakLoop.lock())
+            {
+                loop->removeFrameCallback(id);
+            }
+        });
+    }
+
+    void registerFrameCallback(const std::function<void(int)>& function)
+    {
+        connectFrameCallback(function).release();
+    }
+
+    connection connectEventCallback(const std::function<bool(SDL_Event*)>& function)
+    {
+        const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard lock(callbackMutex);
+            eventCallbackList.emplace_back(id, function);
+        }
+        std::weak_ptr<event_loop> weakLoop = this->weak_from_this();
+        return connection([weakLoop, id]() {
+            if (auto loop = weakLoop.lock())
+            {
+                loop->removeEventCallback(id);
+            }
+        });
+    }
+
+    void registerEventCallback(const std::function<bool(SDL_Event*)>& function)
+    {
+        connectEventCallback(function).release();
+    }
+
+    std::size_t runReady()
+    {
+        std::size_t processed = 0;
+        processed += drainPostedTasks();
+        processed += pollEvents();
+        processed += processConditions();
+        processed += processDelays();
+        return processed;
+    }
+
+    std::size_t runUntilIdle(std::size_t maxIterations = 1000)
+    {
+        std::size_t total = 0;
+        for (std::size_t iteration = 0; iteration < maxIterations; ++iteration)
+        {
+            const auto processed = runReady();
+            total += processed;
+            if (processed == 0)
+            {
+                break;
+            }
+        }
+        return total;
+    }
+
+    bool runFrame()
+    {
+        runReady();
+        if (quitRequested())
+        {
+            return false;
+        }
+
+        const int frameTime = static_cast<int>(SDL_GetTicks());
+        std::vector<std::function<void(int)>> callbacks;
+        {
+            std::lock_guard lock(callbackMutex);
+            callbacks.reserve(frameCallbackList.size());
+            for (const auto& [id, callback] : frameCallbackList)
+            {
+                callbacks.push_back(callback);
+            }
+        }
+        for (auto& callback : callbacks)
+        {
+            safeInvoke([&]() { callback(frameTime); });
+        }
+
+        const auto now = clock::now();
+        const auto desiredFrameTime = std::chrono::milliseconds(1000 / getFps());
+        const auto actualFrameTime = now - lastFrameTime;
+        if (actualFrameTime < desiredFrameTime)
+        {
+            std::this_thread::sleep_for(desiredFrameTime - actualFrameTime);
+        }
+        lastFrameTime = clock::now();
+        return !quitRequested();
     }
 
     bool run()
     {
-        int frameTime = SDL_GetTicks();
+        return runFrame();
+    }
 
+    bool hasReadyWork() const
+    {
+        {
+            std::lock_guard lock(taskMutex);
+            if (!taskQueue.empty())
+            {
+                return true;
+            }
+        }
+        {
+            std::lock_guard lock(delayMutex);
+            if (!delayQueue.empty() && delayQueue.top().due <= clock::now())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool quitRequested() const
+    {
+        return quit.load(std::memory_order_relaxed);
+    }
+
+    void resetQuit()
+    {
+        quit.store(false, std::memory_order_relaxed);
+    }
+
+    void bindToCurrentThread()
+    {
+        mainThreadId = std::this_thread::get_id();
+    }
+
+    bool isMainThread() const
+    {
+        return std::this_thread::get_id() == mainThreadId;
+    }
+
+    void setExceptionHandler(std::function<void(std::exception_ptr)> handler)
+    {
+        std::lock_guard lock(exceptionMutex);
+        exceptionHandler = std::move(handler);
+    }
+
+    event_loop()
+    {
+        mainThreadId = std::this_thread::get_id();
+        lastFrameTime = clock::now();
+        ownsEventsSubsystem = SDL_WasInit(SDL_INIT_EVENTS) == 0;
+        if (ownsEventsSubsystem && SDL_InitSubSystem(SDL_INIT_EVENTS) != 0)
+        {
+            throw std::runtime_error(SDL_GetError());
+        }
+        callFunctionEvent = SDL_RegisterEvents(1);
+    }
+
+    ~event_loop()
+    {
+        if (ownsEventsSubsystem)
+        {
+            SDL_QuitSubSystem(SDL_INIT_EVENTS);
+        }
+    }
+
+    int getFps() const
+    {
+        return fps.load(std::memory_order_relaxed);
+    }
+
+    void setFps(int value)
+    {
+        if (value <= 0)
+        {
+            throw std::invalid_argument("event-loop fps must be positive");
+        }
+        fps.store(value, std::memory_order_relaxed);
+    }
+
+  private:
+    void wake()
+    {
+        if (callFunctionEvent == static_cast<Uint32>(-1) || wakePending.exchange(true, std::memory_order_relaxed))
+        {
+            return;
+        }
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = callFunctionEvent;
+        if (SDL_PushEvent(&event) <= 0)
+        {
+            wakePending.store(false, std::memory_order_relaxed);
+        }
+    }
+
+    std::size_t drainPostedTasks()
+    {
+        std::queue<std::function<void()>> ready;
+        {
+            std::lock_guard lock(taskMutex);
+            ready.swap(taskQueue);
+        }
+        wakePending.store(false, std::memory_order_relaxed);
+
+        std::size_t processed = 0;
+        while (!ready.empty())
+        {
+            auto function = std::move(ready.front());
+            ready.pop();
+            safeInvoke(function);
+            ++processed;
+        }
+        return processed;
+    }
+
+    std::size_t pollEvents()
+    {
+        std::size_t processed = 0;
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            ++processed;
             if (event.type == SDL_QUIT)
             {
-                return false;
+                quit.store(true, std::memory_order_relaxed);
+                continue;
             }
-            for (const auto& cm : eventCallbackList)
+            if (event.type == callFunctionEvent)
             {
-                if (cm(&event))
+                continue;
+            }
+
+            std::vector<std::function<bool(SDL_Event*)>> callbacks;
+            {
+                std::lock_guard lock(callbackMutex);
+                callbacks.reserve(eventCallbackList.size());
+                for (const auto& [id, callback] : eventCallbackList)
+                {
+                    callbacks.push_back(callback);
+                }
+            }
+            for (auto& callback : callbacks)
+            {
+                bool handled = false;
+                safeInvoke([&]() { handled = callback(&event); });
+                if (handled)
                 {
                     break;
                 }
             }
         }
+        return processed;
+    }
 
-        auto it = conditionalQueue.begin();
-        while (it != conditionalQueue.end())
+    std::size_t processConditions()
+    {
+        std::vector<conditional_task> conditions;
         {
-            if (it->first())
+            std::lock_guard lock(conditionalMutex);
+            conditions.assign(conditionalQueue.begin(), conditionalQueue.end());
+        }
+
+        std::size_t processed = 0;
+        for (auto& conditionTask : conditions)
+        {
+            if (conditionTask.cancelled->load(std::memory_order_relaxed))
             {
-                it->second();
-                it = conditionalQueue.erase(it);
+                removeCondition(conditionTask.id);
+                continue;
             }
-            else
+
+            bool ready = false;
+            safeInvoke([&]() { ready = conditionTask.predicate(); });
+            if (!ready)
             {
-                ++it;
+                continue;
+            }
+
+            if (removeCondition(conditionTask.id))
+            {
+                safeInvoke(conditionTask.function);
+                ++processed;
+            }
+        }
+        return processed;
+    }
+
+    std::size_t processDelays()
+    {
+        std::vector<delayed_task> ready;
+        const auto now = clock::now();
+        {
+            std::lock_guard lock(delayMutex);
+            while (!delayQueue.empty() && delayQueue.top().due <= now)
+            {
+                ready.push_back(delayQueue.top());
+                delayQueue.pop();
             }
         }
 
-        while (!delayQueue.empty() && delayQueue.top().first < frameTime)
+        std::size_t processed = 0;
+        for (auto& delayed : ready)
         {
-            delayQueue.top().second();
-            delayQueue.pop();
-        }
-
-        for (const auto& f : frameCallbackList)
-        {
-            f(frameTime);
-        }
-
-        int endTime = SDL_GetTicks();
-        int actualFrameTime = endTime - lastFrameTime;
-        int desiredFrameTime = 1000 / fps;
-
-        int diffTime = desiredFrameTime - actualFrameTime;
-        if (diffTime < 0)
-        {
-            // TODO: vstd::logger::warning("CEventLoop:", "cannot achieve specified fps!");
-        }
-        else
-        {
-            SDL_Delay(diffTime);
-        }
-
-        this->lastFrameTime = SDL_GetTicks();
-
-        return true;
-    }
-
-    event_loop()
-    {
-        SDL_Init(SDL_INIT_EVENTS);
-        registerEventCallback(
-            [this](SDL_Event* event)
+            if (!delayed.cancelled->load(std::memory_order_relaxed))
             {
-                if (event->type == _call_function_event)
-                {
-                    static_cast<std::function<void()>*>(event->user.data1)->operator()();
-                    delete static_cast<std::function<void()>*>(event->user.data1);
-                    return true;
-                }
-                return false;
-            });
+                safeInvoke(delayed.function);
+                ++processed;
+            }
+        }
+        return processed;
     }
 
-    ~event_loop()
+    template <typename F> void safeInvoke(F&& function)
     {
-        SDL_Quit();
+        try
+        {
+            function();
+        }
+        catch (...)
+        {
+            reportException(std::current_exception());
+        }
     }
 
-  private:
-    int fps = 100;
-
-  public:
-    int getFps()
+    void reportException(std::exception_ptr error)
     {
-        return fps;
+        std::function<void(std::exception_ptr)> handler;
+        {
+            std::lock_guard lock(exceptionMutex);
+            handler = exceptionHandler;
+        }
+        if (handler)
+        {
+            try
+            {
+                handler(error);
+            }
+            catch (...)
+            {
+            }
+        }
     }
 
-    void setFps(int fps)
+    bool removeCondition(std::size_t id)
     {
-        this->fps = fps;
+        std::lock_guard lock(conditionalMutex);
+        for (auto iterator = conditionalQueue.begin(); iterator != conditionalQueue.end(); ++iterator)
+        {
+            if (iterator->id == id)
+            {
+                conditionalQueue.erase(iterator);
+                return true;
+            }
+        }
+        return false;
     }
+
+    void removeFrameCallback(std::size_t id)
+    {
+        std::lock_guard lock(callbackMutex);
+        frameCallbackList.remove_if([id](const auto& item) { return item.first == id; });
+    }
+
+    void removeEventCallback(std::size_t id)
+    {
+        std::lock_guard lock(callbackMutex);
+        eventCallbackList.remove_if([id](const auto& item) { return item.first == id; });
+    }
+
+    clock::time_point lastFrameTime;
+    Uint32 callFunctionEvent = static_cast<Uint32>(-1);
+    std::thread::id mainThreadId;
+    bool ownsEventsSubsystem = false;
+    std::atomic_bool wakePending{false};
+    std::atomic_bool quit{false};
+    std::atomic_int fps{100};
+    std::atomic_size_t nextId{1};
+
+    mutable std::mutex taskMutex;
+    std::queue<std::function<void()>> taskQueue;
+
+    mutable std::mutex delayMutex;
+    std::priority_queue<delayed_task, std::vector<delayed_task>, delay_compare> delayQueue;
+
+    mutable std::mutex conditionalMutex;
+    std::list<conditional_task> conditionalQueue;
+
+    mutable std::mutex callbackMutex;
+    std::list<std::pair<std::size_t, std::function<void(int)>>> frameCallbackList;
+    std::list<std::pair<std::size_t, std::function<bool(SDL_Event*)>>> eventCallbackList;
+
+    mutable std::mutex exceptionMutex;
+    std::function<void(std::exception_ptr)> exceptionHandler;
+
+    std::condition_variable condition;
 };
 } // namespace vstd
 
