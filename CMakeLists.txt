@@ -61,6 +61,18 @@ add_executable(vmeta_tests tests/vmeta_tests.cpp)
 target_include_directories(vmeta_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(vmeta_tests PRIVATE Boost::filesystem Threads::Threads)
 add_test(NAME vmeta_tests COMMAND vmeta_tests)
+if(MSVC)
+    target_compile_options(vmeta_tests PRIVATE /UNDEBUG)
+else()
+    target_compile_options(vmeta_tests PRIVATE -UNDEBUG)
+endif()
+
+foreach(TEST_NAME vmeta_regressions vmeta_allocations)
+    add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
+    target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(${TEST_NAME} PRIVATE Threads::Threads)
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endforeach()
 
 set(HEADER_SELF_SUFFICIENCY_FILES ${SOURCE_FILES})
 # vconverter.h depends on Boost.Python/Python development headers, which are not part of this target's configured deps.
@@ -91,7 +103,9 @@ if(CLANG_FORMAT_EXE)
     set(FORMAT_FILES
             ${SOURCE_FILES}
             main.cpp
-            tests/vmeta_tests.cpp)
+            tests/vmeta_tests.cpp
+            tests/vmeta_regressions.cpp
+            tests/vmeta_allocations.cpp)
 
     add_custom_target(format
             COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_FILES}

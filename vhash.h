@@ -1,6 +1,5 @@
 /*
  * MIT License
- *
  * Copyright (c) 2019 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -17,14 +16,12 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #pragma once
-
 #include "vtraits.h"
 #include <cstddef>
 #include <functional>
 #include <string>
 #include <typeindex>
 #include <utility>
-
 namespace vstd
 {
 template <int a, int x> struct power
@@ -34,7 +31,6 @@ template <int a, int x> struct power
         value = a * power<a, x - 1>::value
     };
 };
-
 template <int a> struct power<a, 0>
 {
     enum
@@ -42,7 +38,6 @@ template <int a> struct power<a, 0>
         value = 1
     };
 };
-
 template <typename T> struct hasher
 {
     template <typename U = T>
@@ -51,7 +46,6 @@ template <typename T> struct hasher
     {
         return std::hash<U>()(u);
     }
-
     template <typename U = T>
     static std::size_t hash(U u, typename vstd::disable_if<vstd::is_pair<U>::value>::type* = 0,
                             typename vstd::enable_if<vstd::is_enum<U>::value>::type* = 0)
@@ -59,50 +53,24 @@ template <typename T> struct hasher
         return hasher<int>::hash(static_cast<int>(u));
     }
 };
-
 template <typename T> std::size_t hash_combine(T t)
 {
     return hasher<T>::hash(t);
 }
-
 template <typename F, typename G, typename... T> std::size_t hash_combine(F f, G g, T... args)
 {
     return power<31, sizeof...(args) + 1>::value * hash_combine(f) + hash_combine(g, args...);
 }
 } // namespace vstd
-
-namespace std
+namespace vstd
 {
-template <> struct hash<std::pair<int, int>>
+struct pair_hash
 {
-    std::size_t operator()(const std::pair<int, int>& pair) const
+    template <typename First, typename Second> std::size_t operator()(const std::pair<First, Second>& value) const
     {
-        return vstd::hash_combine(pair.first, pair.second);
+        const auto first = std::hash<First>()(value.first);
+        const auto second = std::hash<Second>()(value.second);
+        return first ^ (second + 0x9e3779b9 + (first << 6) + (first >> 2));
     }
 };
-
-template <> struct hash<std::pair<std::string, int>>
-{
-    std::size_t operator()(const std::pair<std::string, int>& pair) const
-    {
-        return vstd::hash_combine(pair.first, pair.second);
-    }
-};
-
-template <> struct hash<std::pair<std::string, std::string>>
-{
-    std::size_t operator()(const std::pair<std::string, std::string>& pair) const
-    {
-        return vstd::hash_combine(pair.first, pair.second);
-    }
-};
-
-template <> struct hash<std::pair<std::type_index, std::type_index>>
-{
-    std::size_t operator()(const std::pair<std::type_index, std::type_index>& pair) const
-    {
-        return vstd::hash_combine(pair.first, pair.second);
-    }
-};
-
-} // namespace std
+} // namespace vstd
