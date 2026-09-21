@@ -1,0 +1,252 @@
+name: vmeta before-after benchmark
+on:
+  push:
+    branches: [bench/vmeta-performance-20260921]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 3975b9de3ddb3106a24c420ee94410dd7161d2ea
+          path: before
+      - uses: actions/checkout@v4
+        with:
+          ref: 81da44fbde24db8e50b2704038f43232147cc62f
+          path: after
+      - name: Generate benchmark harness
+        shell: bash
+        run: |
+          cat > benchmark.cpp <<'CPP'
+          #include "vhash.h"
+          #include "vmeta.h"
+          #include <chrono>
+          #include <cstdint>
+          #include <cstdlib>
+          #include <iomanip>
+          #include <iostream>
+          #include <new>
+          #include <string>
+          namespace {
+          bool counting = false;
+          std::uint64_t allocation_count = 0;
+          std::uint64_t allocation_bytes = 0;
+          void record(std::size_t size) {
+              if (counting) {
+                  ++allocation_count;
+                  allocation_bytes += size;
+              }
+          }
+          }
+          void* operator new(std::size_t size) {
+              record(size);
+              if (void* pointer = std::malloc(size ? size : 1)) return pointer;
+              throw std::bad_alloc();
+          }
+          void* operator new[](std::size_t size) { return ::operator new(size); }
+          void operator delete(void* pointer) noexcept { std::free(pointer); }
+          void operator delete[](void* pointer) noexcept { std::free(pointer); }
+          void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
+          void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
+          void* operator new(std::size_t size, std::align_val_t alignment) {
+              record(size);
+              void* pointer = nullptr;
+              if (posix_memalign(&pointer, static_cast<std::size_t>(alignment), size ? size : 1) == 0) return pointer;
+              throw std::bad_alloc();
+          }
+          void* operator new[](std::size_t size, std::align_val_t alignment) { return ::operator new(size, alignment); }
+          void operator delete(void* pointer, std::align_val_t) noexcept { std::free(pointer); }
+          void operator delete[](void* pointer, std::align_val_t) noexcept { std::free(pointer); }
+          void operator delete(void* pointer, std::size_t, std::align_val_t) noexcept { std::free(pointer); }
+          void operator delete[](void* pointer, std::size_t, std::align_val_t) noexcept { std::free(pointer); }
+          class BenchBase {
+              V_META(BenchBase, vstd::meta::empty, V_METHOD(BenchBase, inherited, int, int))
+            public:
+              virtual ~BenchBase() = default;
+              __attribute__((noinline)) int inherited(int value) { return value + 2; }
+          };
+          class BenchSubject : public BenchBase {
+              V_META(BenchSubject, BenchBase, V_METHOD(BenchSubject, inc, int, int),
+                     V_METHOD(BenchSubject, sum, int, int, int, int),
+                     V_METHOD(BenchSubject, text, int, std::string),
+                     V_PROPERTY(BenchSubject, int, value, getValue, setValue))
+            public:
+              __attribute__((noinline)) int inc(int value) { return value + 1; }
+              __attribute__((noinline)) int sum(int a, int b, int c) { return a + b + c; }
+              __attribute__((noinline)) int text(std::string value) { return static_cast<int>(value.size()) + value[0]; }
+              __attribute__((noinline)) int getValue() { return stored; }
+              __attribute__((noinline)) void setValue(int value) { stored = value; }
+            private:
+              int stored = 41;
+          };
+          template <typename Function>
+          void measure(const char* name, std::uint64_t iterations, Function function, int expected0, int expected1023) {
+              if (function(0) != expected0 || function(1023) != expected1023) throw std::runtime_error(name);
+              std::uint64_t checksum = 0;
+              for (int i = 0; i < 20000; ++i) {
+                  auto result = function(i & 1023);
+                  asm volatile("" : "+r"(result) : : "memory");
+                  checksum += static_cast<unsigned>(result);
+              }
+              const auto start = std::chrono::steady_clock::now();
+              for (std::uint64_t i = 0; i < iterations; ++i) {
+                  auto result = function(static_cast<int>(i & 1023));
+                  asm volatile("" : "+r"(result) : : "memory");
+                  checksum += static_cast<unsigned>(result);
+              }
+              const auto elapsed = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - start).count();
+              allocation_count = allocation_bytes = 0;
+              counting = true;
+              for (int i = 0; i < 10000; ++i) {
+                  auto result = function(i & 1023);
+                  asm volatile("" : "+r"(result) : : "memory");
+                  checksum += static_cast<unsigned>(result);
+              }
+              counting = false;
+              std::cout << name << ',' << elapsed / iterations << ',' << allocation_count / 10000.0 << ','
+                        << allocation_bytes / 10000.0 << ',' << checksum << '\n';
+          }
+          int main(int argc, char** argv) {
+              const std::uint64_t iterations = argc > 1 ? std::stoull(argv[1]) : 1000000;
+              if (!iterations) return 2;
+              auto object = std::make_shared<BenchSubject>();
+              auto meta = object->meta();
+              meta->set_dynamic_property<BenchSubject, int>("dynamic_value", object, 73);
+              meta->set_method<BenchSubject, int, int>("dynamic_inc", object, [](BenchSubject*, int n) { return n + 1; });
+              auto cached = meta->find_method<BenchSubject, int>("inc", object);
+              std::vector<std::any> arguments{object, 0};
+              const std::string payload(128, 'x');
+              std::cout << std::fixed << std::setprecision(6);
+              std::cout << "case,ns_per_call,allocations_per_call,allocated_bytes_per_call,checksum\n";
+              measure("direct_int", iterations, [&](int n) { return object->inc(n); }, 1, 1024);
+              measure("invoke_int", iterations, [&](int n) { return meta->invoke_method<int>("inc", object, n); }, 1, 1024);
+              measure("cached_int", iterations, [&](int n) { arguments[1] = n; return std::any_cast<int>(cached->invoke(arguments)); }, 1, 1024);
+              measure("invoke_three_args", iterations, [&](int n) { return meta->invoke_method<int>("sum", object, n, 2, 3); }, 5, 1028);
+              measure("invoke_inherited", iterations, [&](int n) { return meta->invoke_method<int>("inherited", object, n); }, 2, 1025);
+              measure("static_property_get", iterations, [&](int) { return meta->get_property<BenchSubject, int>("value", object); }, 41, 41);
+              measure("dynamic_property_get", iterations, [&](int) { return meta->get_property<BenchSubject, int>("dynamic_value", object); }, 73, 73);
+              measure("dynamic_method", iterations, [&](int n) { return meta->invoke_method<int>("dynamic_inc", object, n); }, 1, 1024);
+              measure("string_value_128", iterations, [&](int) { return meta->invoke_method<int>("text", object, payload); }, 248, 248);
+          }
+          CPP
+          cat > run.py <<'PY'
+          import csv
+          import io
+          import json
+          import os
+          import pathlib
+          import platform
+          import statistics
+          import subprocess
+          import time
+          root = pathlib.Path.cwd()
+          output = root / 'performance-results'
+          output.mkdir(exist_ok=True)
+          source = root / 'benchmark.cpp'
+          revisions = {'before': '3975b9de3ddb3106a24c420ee94410dd7161d2ea', 'after': '81da44fbde24db8e50b2704038f43232147cc62f'}
+          iterations = 1000000
+          repetitions = 9
+          cpu = min(os.sched_getaffinity(0))
+          flags = ['-std=c++23', '-O2', '-DNDEBUG', '-pthread']
+          environment = {
+              'revisions': revisions, 'platform': platform.platform(),
+              'lscpu': subprocess.check_output(['lscpu'], text=True),
+              'cpu_affinity': cpu, 'flags': flags,
+              'iterations_per_timing_sample': iterations, 'repetitions': repetitions,
+              'warmup_calls_per_case': 20000, 'allocation_sample_calls': 10000,
+              'compiler_versions': {}, 'compile_seconds': {},
+          }
+          rows = []
+          for compiler in ('g++', 'clang++'):
+              environment['compiler_versions'][compiler] = subprocess.check_output([compiler, '--version'], text=True)
+              executables = {}
+              for revision in revisions:
+                  include = root / revision
+                  actual = subprocess.check_output(['git', '-C', str(include), 'rev-parse', 'HEAD'], text=True).strip()
+                  if actual != revisions[revision]:
+                      raise RuntimeError(f'Revision mismatch: {actual}')
+                  executable = output / (compiler.replace('+', 'p') + '-' + revision)
+                  command = [compiler, *flags, '-I' + str(include), str(source), '-o', str(executable)]
+                  print('COMMAND', ' '.join(command), flush=True)
+                  started = time.monotonic()
+                  subprocess.run(command, check=True)
+                  environment['compile_seconds'][compiler + '/' + revision] = time.monotonic() - started
+                  executables[revision] = executable
+              for sample in range(repetitions):
+                  order = ('before', 'after') if sample % 2 == 0 else ('after', 'before')
+                  for revision in order:
+                      command = ['taskset', '-c', str(cpu), str(executables[revision]), str(iterations)]
+                      data = subprocess.check_output(command, text=True)
+                      for row in csv.DictReader(io.StringIO(data)):
+                          row.update(compiler=compiler, revision=revision, sample=sample)
+                          for key in ('ns_per_call', 'allocations_per_call', 'allocated_bytes_per_call'):
+                              row[key] = float(row[key])
+                          row['checksum'] = int(row['checksum'])
+                          rows.append(row)
+                      print('SAMPLE', compiler, revision, sample + 1, 'complete', flush=True)
+          summary = []
+          for compiler in ('g++', 'clang++'):
+              cases = list(dict.fromkeys(row['case'] for row in rows if row['compiler'] == compiler))
+              for case in cases:
+                  item = {'compiler': compiler, 'case': case}
+                  checksums = set()
+                  for revision in revisions:
+                      subset = [row for row in rows if row['compiler'] == compiler and row['case'] == case and row['revision'] == revision]
+                      times = [row['ns_per_call'] for row in subset]
+                      checksums.update(row['checksum'] for row in subset)
+                      item[revision] = {
+                          'median_ns': statistics.median(times), 'min_ns': min(times), 'max_ns': max(times),
+                          'allocations_per_call': subset[0]['allocations_per_call'],
+                          'allocated_bytes_per_call': subset[0]['allocated_bytes_per_call'],
+                          'million_calls_per_second': 1000 / statistics.median(times),
+                      }
+                      if len({row['allocations_per_call'] for row in subset}) != 1:
+                          raise RuntimeError('Inconsistent allocation counts')
+                  if len(checksums) != 1:
+                      raise RuntimeError(f'Before/after checksum mismatch: {case}')
+                  item['speedup'] = item['before']['median_ns'] / item['after']['median_ns']
+                  item['latency_change_percent'] = 100 * (item['after']['median_ns'] / item['before']['median_ns'] - 1)
+                  summary.append(item)
+          (output / 'environment.json').write_text(json.dumps(environment, indent=2))
+          (output / 'summary.json').write_text(json.dumps(summary, indent=2))
+          with (output / 'samples.csv').open('w') as stream:
+              writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+              writer.writeheader()
+              writer.writerows(rows)
+          (output / 'benchmark.cpp').write_text(source.read_text())
+          (output / 'run.py').write_text(pathlib.Path(__file__).read_text())
+          print('ENVIRONMENT_JSON_BEGIN')
+          print(json.dumps(environment, indent=2))
+          print('ENVIRONMENT_JSON_END')
+          print('SUMMARY_JSON_BEGIN')
+          print(json.dumps(summary, indent=2))
+          print('SUMMARY_JSON_END')
+          print('SAMPLES_CSV_BEGIN')
+          print((output / 'samples.csv').read_text())
+          print('SAMPLES_CSV_END')
+          markdown = ['# vmeta before/after benchmark', '', 'One runner; pinned revisions; nine alternating samples of 1,000,000 calls; 20,000 warmup calls per case. Allocation counts are separately sampled over 10,000 calls. Optimized C++23, -O2 -DNDEBUG, no LTO or sanitizers. Both compilers use libstdc++. Not a game FPS benchmark.', '', '| Compiler | Case | Before ns | After ns | Speedup | Allocations/call before | After |', '|---|---|---:|---:|---:|---:|---:|']
+          for item in summary:
+              markdown.append(f"| {item['compiler']} | {item['case']} | {item['before']['median_ns']:.2f} | {item['after']['median_ns']:.2f} | {item['speedup']:.2f}x | {item['before']['allocations_per_call']:.0f} | {item['after']['allocations_per_call']:.0f} |")
+          report = '\n'.join(markdown) + '\n'
+          (output / 'README.md').write_text(report)
+          if os.environ.get('GITHUB_STEP_SUMMARY'):
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(report)
+          print(report)
+          PY
+      - name: Run paired comparison
+        run: python3 run.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vmeta-performance-results
+          path: |
+            performance-results/*.json
+            performance-results/*.csv
+            performance-results/*.md
+            performance-results/*.cpp
+            performance-results/*.py
