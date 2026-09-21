@@ -457,8 +457,7 @@ template <typename T = void> class neuro
                 {
                     propagated += weights_[layer](next, index) * deltas_[layer][next];
                 }
-                deltas_[current][index] =
-                    propagated * sigmoid_derivative_from_output(activations_[current + 1][index]);
+                deltas_[current][index] = propagated * sigmoid_derivative_from_output(activations_[current + 1][index]);
             }
         }
 
