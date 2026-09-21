@@ -168,33 +168,32 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             return;
         }
 
-        std::mutex mutex;
-        std::unique_lock lock(mutex);
+        std::mutex waitMutex;
+        std::condition_variable waitCondition;
+        std::unique_lock waitLock(waitMutex);
         bool completed = false;
-        std::excepti
-                on_pt
-                 
-                    oke
-                    t
-                                   
-                     
+        std::exception_ptr error;
+        if (!invoke(
+                [&]()
+                {
+                    try
+                    {
+                        function();
                     }
-         
-                    c
-                                       
-                    d::current_exception();
-                }
-                                          std::lock_guard c
-                    guard completionLock(mutex);
-                 
+                    catch (...)
+                    {
+                        error = std::current_exception();
                     }
-                condi
-                    condition.notify_all();
-            }))
+                    {
+                        std::lock_guard completionLock(waitMutex);
+                        completed = true;
+                    }
+                    waitCondition.notify_all();
+                }))
         {
             throw std::runtime_error("failed to schedule event-loop task");
         }
-        condition.wait(lock, [&]() { return completed; });
+        waitCondition.wait(waitLock, [&]() { return completed; });
         if (error)
         {
             std::rethrow_exception(error);
@@ -226,15 +225,15 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             std::lock_guard lock(callbackMutex);
             frameCallbackList.emplace_back(id, function);
         }
-        std::weak_ptr<even
-            t_loop> weakLoop
-            =
-                rn connection([weakLoop, id]() {
-                i
-                               
-            op->removeFrameCallback(id);
-            }
-        });
+        std::weak_ptr<event_loop> weakLoop = this->weak_from_this();
+        return connection(
+            [weakLoop, id]()
+            {
+                if (auto loop = weakLoop.lock())
+                {
+                    loop->removeFrameCallback(id);
+                }
+            });
     }
 
     void registerFrameCallback(const std::function<void(int)>& function)
@@ -249,15 +248,15 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             std::lock_guard lock(callbackMutex);
             eventCallbackList.emplace_back(id, function);
         }
-        std::weak_ptr<even
-            t_loop> weakLoop
-            =
-                rn connection([weakLoop, id]() {
-                i
-                               
-            op->removeEventCallback(id);
-            }
-        });
+        std::weak_ptr<event_loop> weakLoop = this->weak_from_this();
+        return connection(
+            [weakLoop, id]()
+            {
+                if (auto loop = weakLoop.lock())
+                {
+                    loop->removeEventCallback(id);
+                }
+            });
     }
 
     void registerEventCallback(const std::function<bool(SDL_Event*)>& function)
@@ -622,8 +621,6 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     mutable std::mutex exceptionMutex;
     std::function<void(std::exception_ptr)> exceptionHandler;
-
-    std::condition_variable condition;
 };
 } // namespace vstd
 
