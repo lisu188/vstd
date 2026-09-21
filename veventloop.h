@@ -347,6 +347,36 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         return false;
     }
 
+    std::size_t getPendingTaskCount() const
+    {
+        std::lock_guard lock(taskMutex);
+        return taskQueue.size();
+    }
+
+    std::size_t getConditionalTaskCount() const
+    {
+        std::lock_guard lock(conditionalMutex);
+        return conditionalQueue.size();
+    }
+
+    std::size_t getDelayedTaskCount() const
+    {
+        std::lock_guard lock(delayMutex);
+        return delayQueue.size();
+    }
+
+    std::size_t getFrameCallbackCount() const
+    {
+        std::lock_guard lock(callbackMutex);
+        return frameCallbackList.size();
+    }
+
+    std::size_t getEventCallbackCount() const
+    {
+        std::lock_guard lock(callbackMutex);
+        return eventCallbackList.size();
+    }
+
     bool quitRequested() const
     {
         return quit.load(std::memory_order_relaxed);
