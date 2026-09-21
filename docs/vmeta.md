@@ -4,6 +4,8 @@
 
 ## Values and references
 
+Registered property types must be non-reference, copy-constructible values. Declare a string property as `std::string`, even when its C++ getter returns `const std::string&`. Reference-typed property descriptors and dynamic property declarations are rejected at compile time so a value-returning getter cannot accidentally create a dangling reference wrapper.
+
 Reflection results own their values. A registered C++ method returning `T&` or `const T&` is exposed as a copied `T`; request `invoke_method<T>`, not `invoke_method<T&>`. Reference result requests and reference casts from temporary `std::any` objects are rejected at compile time.
 
 Value and const-reference parameters accept owned arguments. Exact const-reference arguments can borrow the invocation payload. Converted arguments are retained by the invocation until the function returns. Mutable reference parameters require `std::ref(value)`; passing an ordinary value throws rather than silently mutating a copy. `std::cref` is supported for read-only references. Rvalue-reference parameters receive an invocation-owned value, not ownership of the caller's object. Argument and result values must be copy-constructible because the transport is `std::any`.

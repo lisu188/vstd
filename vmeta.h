@@ -205,6 +205,9 @@ template <typename T> class meta_argument
 } // namespace detail
 namespace detail
 {
+template <typename T>
+concept MetaPropertyValue = !std::is_reference_v<T> && std::copy_constructible<T>;
+
 template <typename Actual, typename Expected>
 concept MetaReturnCompatible = (std::same_as<Expected, void> && std::same_as<Actual, void>) ||
                                (!std::same_as<Expected, void> && std::convertible_to<Actual, Expected>);
@@ -218,10 +221,10 @@ template <typename Method, typename ObjectType, typename ReturnType, typename...
 concept MetaMemberMethod = std::is_member_function_pointer_v<std::decay_t<Method>> &&
                            MetaCallable<Method, ObjectType, ReturnType, ArgumentTypes...>;
 template <typename Getter, typename ObjectType, typename PropertyType>
-concept MetaGetter = std::invocable<Getter, ObjectType*> &&
+concept MetaGetter = MetaPropertyValue<PropertyType> && std::invocable<Getter, ObjectType*> &&
                      MetaReturnCompatible<std::invoke_result_t<Getter, ObjectType*>, PropertyType>;
 template <typename Setter, typename ObjectType, typename PropertyType>
-concept MetaSetter = std::invocable<Setter, ObjectType*, PropertyType> &&
+concept MetaSetter = MetaPropertyValue<PropertyType> && std::invocable<Setter, ObjectType*, PropertyType> &&
                      std::same_as<std::invoke_result_t<Setter, ObjectType*, PropertyType>, void>;
 template <typename ObjectType, typename ReturnType = void, typename... ArgumentTypes> class method_impl : public method
 {
@@ -324,7 +327,9 @@ template <typename ObjectType, typename ReturnType = void, typename... ArgumentT
         return {std::type_index(typeid(detail::meta_value_t<ArgumentTypes>))...};
     }
 };
-template <typename ObjectType, typename PropertyType> class property_impl : public property
+template <typename ObjectType, typename PropertyType>
+    requires MetaPropertyValue<PropertyType>
+class property_impl : public property
 {
     std::string _name;
     std::function<PropertyType(ObjectType*)> _getter;
@@ -368,7 +373,9 @@ template <typename ObjectType, typename PropertyType> class property_impl : publ
         return std::type_index(typeid(PropertyType));
     }
 };
-template <typename ObjectType, typename PropertyType> class dynamic_property_impl : public property
+template <typename ObjectType, typename PropertyType>
+    requires MetaPropertyValue<PropertyType>
+class dynamic_property_impl : public property
 {
     std::string _name;
     PropertyType _value{};
@@ -634,6 +641,7 @@ class meta
         return find_method(method_signature::from<ArgumentTypes...>(name), ob);
     }
     template <typename ObjectType, typename PropertyType>
+        requires detail::MetaPropertyValue<PropertyType>
     void set_dynamic_property(const std::string& prop, const std::shared_ptr<ObjectType>& t,
                               const PropertyType& p) const
     {
