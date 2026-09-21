@@ -82,6 +82,7 @@ template <typename T = void> class neuro
     {
         validate_sample(input, expected);
         training_.push_back({std::move(input), std::move(expected)});
+        training_order_.push_back(training_.size() - 1);
     }
 
     void add_test_sample(std::vector<double> input, std::vector<double> expected)
@@ -107,14 +108,12 @@ template <typename T = void> class neuro
             return;
         }
 
-        std::vector<std::size_t> order(training_.size());
-        std::iota(order.begin(), order.end(), std::size_t{0});
         for (std::size_t epoch = 0; epoch < epochs; ++epoch)
         {
-            std::shuffle(order.begin(), order.end(), rng_);
-            for (const auto index : order)
+            std::shuffle(training_order_.begin(), training_order_.end(), rng_);
+            for (const auto index : training_order_)
             {
-                const auto gradients = compute_gradients(training_[index].input, training_[index].expected);
+                const auto& gradients = compute_gradients(training_[index].input, training_[index].expected);
                 apply_gradients(gradients);
             }
         }
@@ -191,7 +190,7 @@ template <typename T = void> class neuro
             throw std::invalid_argument("epsilon must be finite and positive");
         }
 
-        const auto analytical = compute_gradients(input, expected);
+        const auto& analytical = compute_gradients(input, expected);
         double max_relative_error = 0.0;
 
         for (std::size_t layer = 0; layer < weights_.size(); ++layer)
@@ -294,6 +293,10 @@ template <typename T = void> class neuro
     std::vector<std::vector<double>> velocity_biases_;
     std::vector<sample> training_;
     std::vector<sample> tests_;
+    std::vector<std::size_t> training_order_;
+    std::vector<std::vector<double>> activations_;
+    std::vector<std::vector<double>> deltas_;
+    gradients gradient_buffer_;
 
     static std::vector<std::size_t> convert_layers(const std::vector<int>& layers)
     {
@@ -358,6 +361,22 @@ template <typename T = void> class neuro
             biases_.emplace_back(fan_out, 0.0);
             velocity_biases_.emplace_back(fan_out, 0.0);
         }
+
+        activations_.resize(layers_.size());
+        for (std::size_t layer = 0; layer < layers_.size(); ++layer)
+        {
+            activations_[layer].resize(layers_[layer]);
+        }
+
+        deltas_.resize(weights_.size());
+        gradient_buffer_.weights.reserve(weights_.size());
+        gradient_buffer_.biases.reserve(weights_.size());
+        for (std::size_t layer = 0; layer < weights_.size(); ++layer)
+        {
+            deltas_[layer].resize(layers_[layer + 1]);
+            gradient_buffer_.weights.emplace_back(weights_[layer].rows, weights_[layer].cols);
+            gradient_buffer_.biases.emplace_back(layers_[layer + 1]);
+        }
     }
 
     double sigmoid(double value) const
@@ -400,51 +419,61 @@ template <typename T = void> class neuro
         return activations;
     }
 
-    gradients compute_gradients(std::span<const double> input, std::span<const double> expected) const
+    void forward_training(std::span<const double> input)
+    {
+        std::copy(input.begin(), input.end(), activations_.front().begin());
+        for (std::size_t layer = 0; layer < weights_.size(); ++layer)
+        {
+            for (std::size_t row = 0; row < weights_[layer].rows; ++row)
+            {
+                double sum = biases_[layer][row];
+                for (std::size_t col = 0; col < weights_[layer].cols; ++col)
+                {
+                    sum += weights_[layer](row, col) * activations_[layer][col];
+                }
+                activations_[layer + 1][row] = sigmoid(sum);
+            }
+        }
+    }
+
+    const gradients& compute_gradients(std::span<const double> input, std::span<const double> expected)
     {
         validate_sample(input, expected);
-        const auto activations = forward(input);
-        std::vector<std::vector<double>> deltas(weights_.size());
-        deltas.back().resize(layers_.back());
+        forward_training(input);
 
         for (std::size_t index = 0; index < layers_.back(); ++index)
         {
-            const double output = activations.back()[index];
-            deltas.back()[index] = (output - expected[index]) * sigmoid_derivative_from_output(output);
+            const double output = activations_.back()[index];
+            deltas_.back()[index] = (output - expected[index]) * sigmoid_derivative_from_output(output);
         }
 
         for (std::size_t layer = weights_.size() - 1; layer > 0; --layer)
         {
             const std::size_t current = layer - 1;
-            deltas[current].resize(layers_[current + 1]);
             for (std::size_t index = 0; index < layers_[current + 1]; ++index)
             {
                 double propagated = 0.0;
                 for (std::size_t next = 0; next < layers_[layer + 1]; ++next)
                 {
-                    propagated += weights_[layer](next, index) * deltas[layer][next];
+                    propagated += weights_[layer](next, index) * deltas_[layer][next];
                 }
-                deltas[current][index] = propagated * sigmoid_derivative_from_output(activations[current + 1][index]);
+                deltas_[current][index] =
+                    propagated * sigmoid_derivative_from_output(activations_[current + 1][index]);
             }
         }
 
-        gradients result;
-        result.weights.reserve(weights_.size());
-        result.biases.reserve(weights_.size());
         for (std::size_t layer = 0; layer < weights_.size(); ++layer)
         {
-            matrix weight_gradient(weights_[layer].rows, weights_[layer].cols);
             for (std::size_t row = 0; row < weights_[layer].rows; ++row)
             {
                 for (std::size_t col = 0; col < weights_[layer].cols; ++col)
                 {
-                    weight_gradient(row, col) = deltas[layer][row] * activations[layer][col];
+                    gradient_buffer_.weights[layer](row, col) = deltas_[layer][row] * activations_[layer][col];
                 }
+                gradient_buffer_.biases[layer][row] = deltas_[layer][row];
             }
-            result.weights.push_back(std::move(weight_gradient));
-            result.biases.push_back(deltas[layer]);
         }
-        return result;
+        return gradient_buffer_;
     }
 
     void apply_gradients(const gradients& gradient)
