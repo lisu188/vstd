@@ -8,75 +8,177 @@ namespace
 {
 void check(bool condition, const char* expression)
 {
-    if (!condition) { throw std::runtime_error(expression); }
+    if (!condition)
+    {
+        throw std::runtime_error(expression);
+    }
 }
 #define CHECK(...) check(static_cast<bool>((__VA_ARGS__)), #__VA_ARGS__)
 
 template <typename Exception, typename Function> void throws(Function function)
 {
-    try { function(); }
-    catch (const Exception&) { return; }
+    try
+    {
+        function();
+    }
+    catch (const Exception&)
+    {
+        return;
+    }
     throw std::runtime_error("expected exception was not thrown");
 }
 
 struct Subject
 {
-    V_META(Subject, vstd::meta::empty,
-           V_METHOD(Subject, text, const std::string&),
-           V_METHOD(Subject, length, int, const std::string&),
-           V_METHOD(Subject, bump, void, int&),
-           V_METHOD(Subject, take, int, std::string&&),
-           V_METHOD(Subject, payload, std::any),
-           V_METHOD(Subject, unpack, int, std::any),
-           V_METHOD(Subject, four, int, int, int, int, int),
-           V_METHOD(Subject, seven, int, int, int, int, int, int, int, int),
-           V_METHOD(Subject, mark),
-           V_METHOD(Subject, overloaded, int, int),
-           V_METHOD(Subject, overloaded, int, std::string),
+    V_META(Subject, vstd::meta::empty, V_METHOD(Subject, text, const std::string&),
+           V_METHOD(Subject, length, int, const std::string&), V_METHOD(Subject, bump, void, int&),
+           V_METHOD(Subject, take, int, std::string&&), V_METHOD(Subject, payload, std::any),
+           V_METHOD(Subject, unpack, int, std::any), V_METHOD(Subject, four, int, int, int, int, int),
+           V_METHOD(Subject, seven, int, int, int, int, int, int, int, int), V_METHOD(Subject, mark),
+           V_METHOD(Subject, overloaded, int, int), V_METHOD(Subject, overloaded, int, std::string),
            V_PROPERTY(Subject, int, number, getNumber, setNumber))
   public:
     std::string value = std::string(256, 'a');
     int number = 0;
-    const std::string& text() const { return value; }
-    int length(const std::string& text) const { return static_cast<int>(text.size()); }
-    void bump(int& value) { ++value; }
-    int take(std::string&& value) { return static_cast<int>(value.size()); }
-    std::any payload() { return 42; }
-    int unpack(std::any value) { return std::any_cast<int>(value); }
-    int four(int a, int b, int c, int d) { return a + b + c + d; }
-    int seven(int a, int b, int c, int d, int e, int f, int g) { return a + b + c + d + e + f + g; }
-    void mark() { number = 9; }
-    int overloaded(int value) { return value; }
-    int overloaded(std::string value) { return static_cast<int>(value.size()); }
-    int getNumber() const noexcept { return number; }
-    void setNumber(int value) { number = value; }
+    const std::string& text() const
+    {
+        return value;
+    }
+    int length(const std::string& text) const
+    {
+        return static_cast<int>(text.size());
+    }
+    void bump(int& value)
+    {
+        ++value;
+    }
+    int take(std::string&& value)
+    {
+        return static_cast<int>(value.size());
+    }
+    std::any payload()
+    {
+        return 42;
+    }
+    int unpack(std::any value)
+    {
+        return std::any_cast<int>(value);
+    }
+    int four(int a, int b, int c, int d)
+    {
+        return a + b + c + d;
+    }
+    int seven(int a, int b, int c, int d, int e, int f, int g)
+    {
+        return a + b + c + d + e + f + g;
+    }
+    void mark()
+    {
+        number = 9;
+    }
+    int overloaded(int value)
+    {
+        return value;
+    }
+    int overloaded(std::string value)
+    {
+        return static_cast<int>(value.size());
+    }
+    int getNumber() const noexcept
+    {
+        return number;
+    }
+    void setNumber(int value)
+    {
+        number = value;
+    }
 };
 
-struct Empty { V_META(Empty, vstd::meta::empty) };
+struct AccessorSubject
+{
+    V_META(AccessorSubject, vstd::meta::empty, V_PROPERTY(AccessorSubject, std::string, label, getLabel, setLabel),
+           V_METHOD(AccessorSubject, qualified, int))
+  public:
+    std::string label;
+    const std::string& getLabel() const
+    {
+        return label;
+    }
+    void setLabel(const std::string& value)
+    {
+        label = value;
+    }
+    int qualified()
+    {
+        return 1;
+    }
+    int qualified() const
+    {
+        return 2;
+    }
+};
+
+struct Empty
+{
+    V_META(Empty, vstd::meta::empty)
+};
 struct Base
 {
     V_META(Base, vstd::meta::empty, V_METHOD(Base, id, int))
   public:
     virtual ~Base() = default;
-    int id() { return 1; }
+    int id()
+    {
+        return 1;
+    }
 };
-struct Middle : Base { V_META(Middle, Base) };
+struct Middle : Base
+{
+    V_META(Middle, Base)
+};
 struct Derived : Middle
 {
     V_META(Derived, Middle, V_METHOD(Derived, id, int))
   public:
-    int id() { return 3; }
+    int id()
+    {
+        return 3;
+    }
 };
 struct Collision
 {
     V_META(Collision, vstd::meta::empty, V_METHOD(Collision, f, int, int), V_METHOD(Collision, f, int, const int&))
   public:
-    int f(int value) { return value; }
-    int f(const int& value) { return value; }
+    int f(int value)
+    {
+        return value;
+    }
+    int f(const int& value)
+    {
+        return value;
+    }
 };
-namespace alpha { struct Entry { V_META(Entry, vstd::meta::empty) }; }
-namespace beta { struct Entry { V_META(Entry, vstd::meta::empty) }; }
-namespace gamma { struct Entry { V_META_NAMED(Entry, vstd::meta::empty, "gamma::Entry") }; }
+namespace alpha
+{
+struct Entry
+{
+    V_META(Entry, vstd::meta::empty)
+};
+} // namespace alpha
+namespace beta
+{
+struct Entry
+{
+    V_META(Entry, vstd::meta::empty)
+};
+} // namespace beta
+namespace gamma
+{
+struct Entry
+{
+    V_META_NAMED(Entry, vstd::meta::empty, "gamma::Entry")
+};
+} // namespace gamma
 struct Throwing
 {
     inline static bool fail = false;
@@ -84,7 +186,10 @@ struct Throwing
     Throwing() = default;
     Throwing(const Throwing& other) : value(other.value)
     {
-        if (fail) { throw std::runtime_error("copy failed"); }
+        if (fail)
+        {
+            throw std::runtime_error("copy failed");
+        }
     }
     Throwing& operator=(const Throwing&) = default;
 };
@@ -94,15 +199,16 @@ struct NonDefault
     explicit NonDefault(int value) : value(value) {}
 };
 
-template <typename R> concept CanInvokeResult = requires(vstd::meta& meta, std::shared_ptr<Subject> object)
-{
-    meta.template invoke_method<R>("text", object);
-};
-template <typename R> concept CanCastTemporary = requires { vstd::any_cast<R>(std::any(1)); };
+template <typename R>
+concept CanInvokeResult =
+    requires(vstd::meta& meta, std::shared_ptr<Subject> object) { meta.template invoke_method<R>("text", object); };
+template <typename R>
+concept CanCastTemporary = requires { vstd::any_cast<R>(std::any(1)); };
 static_assert(!CanInvokeResult<const std::string&>);
 static_assert(!CanCastTemporary<const int&>);
 static_assert(!CanCastTemporary<int&>);
-static_assert(!vstd::detail::MetaCallable<decltype([](Subject*, std::unique_ptr<int>) {}), Subject, void, std::unique_ptr<int>>);
+static_assert(
+    !vstd::detail::MetaCallable<decltype([](Subject*, std::unique_ptr<int>) {}), Subject, void, std::unique_ptr<int>>);
 
 template <int I> struct ConcurrentRoot
 {
@@ -116,6 +222,14 @@ template <int I> struct ConcurrentChild : ConcurrentRoot<I>
 
 void values()
 {
+    auto accessors = std::make_shared<AccessorSubject>();
+    accessors->meta()->set_property("label", accessors, std::string("compatible"));
+    CHECK(accessors->meta()->get_property<AccessorSubject, std::string>("label", accessors) == "compatible");
+    CHECK(accessors->meta()->invoke_method<std::string>("getLabel", accessors) == "compatible");
+    accessors->meta()->invoke_method<void>("setLabel", accessors, std::string("updated"));
+    CHECK(accessors->label == "updated");
+    CHECK(accessors->meta()->invoke_method<int>("qualified", accessors) == 1);
+
     auto object = std::make_shared<Subject>();
     auto meta = object->meta();
     CHECK(Empty::static_meta());
@@ -224,7 +338,10 @@ template <std::size_t... I> void concurrent(std::index_sequence<I...>)
     std::atomic<int> failures = 0;
     auto work = [&]<std::size_t N>()
     {
-        while (!ready.load(std::memory_order_acquire)) { std::this_thread::yield(); }
+        while (!ready.load(std::memory_order_acquire))
+        {
+            std::this_thread::yield();
+        }
         try
         {
             for (int iteration = 0; iteration < 100; ++iteration)
@@ -237,15 +354,21 @@ template <std::size_t... I> void concurrent(std::index_sequence<I...>)
                 CHECK(!vstd::meta::index()->empty());
             }
         }
-        catch (...) { ++failures; }
+        catch (...)
+        {
+            ++failures;
+        }
     };
     std::vector<std::thread> threads;
     (threads.emplace_back([&] { work.template operator()<I>(); }), ...);
     ready.store(true, std::memory_order_release);
-    for (auto& thread : threads) { thread.join(); }
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
     CHECK(failures == 0);
 }
-}
+} // namespace
 
 int main()
 {
@@ -256,7 +379,8 @@ int main()
         references();
         dynamic_state();
         objects();
-        std::cout << "PASS: vmeta lifetime, any, inheritance, state, constraints, names, nulls and concurrent registration\n";
+        std::cout
+            << "PASS: vmeta lifetime, any, inheritance, state, constraints, names, nulls and concurrent registration\n";
     }
     catch (const std::exception& exception)
     {

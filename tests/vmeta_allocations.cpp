@@ -14,13 +14,22 @@ void* operator new(std::size_t size)
     }
     throw std::bad_alloc();
 }
-void operator delete(void* memory) noexcept { std::free(memory); }
-void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete(void* memory) noexcept
+{
+    std::free(memory);
+}
+void operator delete(void* memory, std::size_t) noexcept
+{
+    std::free(memory);
+}
 struct AllocationSubject
 {
     V_META(AllocationSubject, vstd::meta::empty, V_METHOD(AllocationSubject, add, int, int))
   public:
-    int add(int value) { return value + 1; }
+    int add(int value)
+    {
+        return value + 1;
+    }
 };
 int main()
 {
@@ -31,7 +40,10 @@ int main()
     const auto before = allocations.load();
     for (int i = 0; i < 1000; ++i)
     {
-        if (std::any_cast<int>(method->invoke(arguments)) != 42) { return 1; }
+        if (std::any_cast<int>(method->invoke(arguments)) != 42)
+        {
+            return 1;
+        }
     }
     const auto total = allocations.load() - before;
     std::cout << "cached integer invocations: " << total << " allocations / 1000 calls\n";

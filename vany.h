@@ -110,7 +110,7 @@ template <typename T = void> any_registry& registry()
     static any_registry value;
     return value;
 }
-}
+} // namespace detail
 
 template <typename T>
     requires(!std::is_reference_v<T>)
@@ -156,6 +156,6 @@ template <typename T, typename U> void register_any_type()
 {
     static_assert(!std::is_reference_v<T> && !std::is_reference_v<U>, "any conversions must own their values");
     detail::registry().add(typeid(T), typeid(U), [](const std::any& value)
-    { return std::any(vstd::cast<T>(std::any_cast<const U&>(value))); });
+                           { return std::any(vstd::cast<T>(std::any_cast<const U&>(value))); });
 }
-}
+} // namespace vstd
