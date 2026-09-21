@@ -204,9 +204,26 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         condition.notify_all();
         for (auto& callback : callbacks)
         {
-            if (callback.success)
+            if (!callback.success)
+            {
+                continue;
+            }
+            try
             {
                 callback.success(*callbackValue);
+            }
+            catch (...)
+            {
+                if (callback.failure)
+                {
+                    try
+                    {
+                        callback.failure(std::current_exception());
+                    }
+                    catch (...)
+                    {
+                    }
+                }
             }
         }
     }
@@ -229,9 +246,26 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         condition.notify_all();
         for (auto& callback : callbacks)
         {
-            if (callback.success)
+            if (!callback.success)
+            {
+                continue;
+            }
+            try
             {
                 callback.success(nullptr);
+            }
+            catch (...)
+            {
+                if (callback.failure)
+                {
+                    try
+                    {
+                        callback.failure(std::current_exception());
+                    }
+                    catch (...)
+                    {
+                    }
+                }
             }
         }
     }
@@ -258,7 +292,13 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         {
             if (callback.failure)
             {
-                callback.failure(error);
+                try
+                {
+                    callback.failure(error);
+                }
+                catch (...)
+                {
+                }
             }
         }
     }
@@ -400,7 +440,11 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
 
         if (settledState == future_state::value)
         {
-            if (success)
+            if (!success)
+            {
+                return;
+            }
+            try
             {
                 if constexpr (void_type<return_type>)
                 {
@@ -409,6 +453,13 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
                 else
                 {
                     success(*settledResult);
+                }
+            }
+            catch (...)
+            {
+                if (failure)
+                {
+                    failure(std::current_exception());
                 }
             }
         }
