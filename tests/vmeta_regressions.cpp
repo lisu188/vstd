@@ -199,6 +199,24 @@ struct NonDefault
     explicit NonDefault(int value) : value(value) {}
 };
 
+template <typename T>
+concept CanDeclareProperty = requires {
+    typename vstd::detail::property_impl<Subject, T>;
+    typename vstd::detail::dynamic_property_impl<Subject, T>;
+};
+template <typename T>
+concept CanSetDynamicProperty =
+    requires(vstd::meta& meta, std::shared_ptr<Subject> object, std::remove_cvref_t<T>& value) {
+        meta.template set_dynamic_property<Subject, T>("value", object, value);
+    };
+static_assert(CanDeclareProperty<std::string>);
+static_assert(!CanDeclareProperty<std::string&>);
+static_assert(!CanDeclareProperty<const std::string&>);
+static_assert(!CanDeclareProperty<std::string&&>);
+static_assert(!CanSetDynamicProperty<std::string&>);
+static_assert(!CanSetDynamicProperty<const std::string&>);
+static_assert(!CanSetDynamicProperty<std::string&&>);
+
 template <typename R>
 concept CanInvokeResult =
     requires(vstd::meta& meta, std::shared_ptr<Subject> object) { meta.template invoke_method<R>("text", object); };
