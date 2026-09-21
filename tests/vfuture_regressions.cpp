@@ -37,8 +37,8 @@ std::function<void(std::function<void()>)> get_call_later_handler()
 
 std::function<void(std::function<void()>)> get_call_async_handler()
 {
-    return [](std::function<void()> functio
-    ) {
+    return [](std::function<void()> function)
+    {
         static auto pool = std::make_shared<vstd::thread_pool<2>>()->start();
         pool->execute(std::move(function));
     };
@@ -56,8 +56,8 @@ std::function<void(std::function<void()>)> get_call_later_block_handler()
 
 std::function<void(std::function<bool()>)> get_wait_until_handler()
 {
-    return [](std::function<bool()> predicat
-    ) {
+    return [](std::function<bool()> predicate)
+    {
         while (!predicate())
         {
             std::this_thread::yield();
@@ -67,8 +67,8 @@ std::function<void(std::function<bool()>)> get_wait_until_handler()
 
 std::function<void(std::function<bool()>, std::function<void()>)> get_call_when_handler()
 {
-    return [](std::function<bool()> predicate, std::function<void()> functio
-    ) {
+    return [](std::function<bool()> predicate, std::function<void()> function)
+    {
         if (predicate())
         {
             function();
@@ -130,7 +130,8 @@ int main()
     auto combined = vstd::when_all(values);
     assert((combined->get() == std::vector<int>{3, 5, 8}));
 
-    auto cancelled = vstd::later([]() { return 1; });
+    auto cancelledCall = vstd::detail::make_now(vstd::make_function([]() { return 1; }));
+    auto cancelled = std::make_shared<vstd::future<int, void>>(cancelledCall, false);
     cancelled->cancel();
     bool cancellationRethrown = false;
     try
