@@ -41,7 +41,13 @@ class worker_thread
         std::function<void()> task;
         while (pool->pop_task(task, stop_token))
         {
-            task();
+            try
+            {
+                task();
+            }
+            catch (...)
+            {
+            }
         }
     }
 };
