@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2019 Andrzej Lis
+# Copyright (c) 2019-2026 Andrzej Lis
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 #
@@ -82,7 +82,7 @@ if(VSTD_BUILD_BENCHMARKS)
     target_include_directories(vneuro_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
-foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions)
+foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${TEST_NAME} PRIVATE Threads::Threads)
@@ -123,6 +123,7 @@ if(CLANG_FORMAT_EXE)
             tests/vmeta_allocations.cpp
             tests/vneuro_tests.cpp
             tests/vfuture_regressions.cpp
+            tests/vrandom_tests.cpp
             benchmarks/vneuro_bench.cpp)
 
     add_custom_target(format
