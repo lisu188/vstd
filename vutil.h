@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2021 Andrzej Lis
+ * Copyright (c) 2021-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -287,9 +287,16 @@ template <typename T = void> double rand()
     return unif()(rng());
 };
 
+// Returns a uniform integer in the inclusive interval between the two int-representable bounds.
 template <typename T, typename U> int rand(T min, U max)
 {
-    return round((unif()(rng()) + 0.5) * (max - min)) + min;
+    int lower = static_cast<int>(min);
+    int upper = static_cast<int>(max);
+    if (lower > upper)
+    {
+        std::swap(lower, upper);
+    }
+    return std::uniform_int_distribution<int>(lower, upper)(rng());
 };
 
 template <typename T> int rand(T max)
