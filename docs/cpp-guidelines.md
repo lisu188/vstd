@@ -17,8 +17,21 @@ those local copies as lvalues. Use `std::ref` when an explicit reference is requ
 to `std::tuple_element` and avoid reserved identifiers in template parameters.
 
 When a member pointer returns a reference, `functional::call` requires a raw-pointer or `std::reference_wrapper`
-receiver. Returning a reference into a copied receiver would dangle as the call exits. The caller must keep the borrowed
-receiver alive while using the result.
+receiver. Reference results are materialized as values when the callable or any argument may own copied state. To retain
+a reference result, borrow the callable with `std::ref` or use a function/member pointer, and borrow every argument with
+`std::ref` (a member receiver may also be a raw pointer). References to local `std::reference_wrapper` handles are copied
+as handles. Noncopyable lvalue reference results require explicit borrowing; rvalue reference results can move into the
+returned value. The caller must keep all borrowed state alive while using a retained reference. In particular, a member
+function returning a reference and taking an additional value argument produces a value result unless that argument is
+explicitly wrapped with `std::ref`.
+
+`partial::bind` owns its callable and bound arguments. Invocations expand nested binders directly from that persistent
+closure, pass ordinary bound arguments as lvalues, and forward call-time arguments. A returned reference into bound state
+remains valid only while the owning binder lives; a returned reference into a call-time argument follows that argument's
+lifetime. Nested mutable binders retain state between calls.
+When a nested expansion produces a value, a reference returned by the outer callable is materialized before the expanded
+temporary is destroyed. Noncopyable lvalue reference results cannot escape such an invocation. Materialized results use
+direct construction so explicitly declared copy constructors remain supported.
 
 A public polymorphic interface that supports destruction through its base pointer needs a virtual destructor
 (Core Guidelines C.35 and C.80). `stringable` now has a defaulted virtual destructor. Rebuild all consumers together

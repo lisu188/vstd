@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -40,10 +40,9 @@ template <typename Ret, typename... Args> struct builder
     {
         void* storage =
             ((boost::python::converter::rvalue_from_python_storage<std::function<R(Args...)>>*)data)->storage.bytes;
-        boost::python::object func =
-            boost::python::object(boost::python::handle<>(boost::python::borrowed(boost::python::incref(obj_ptr))));
-        new (storage) std::function<R(Args...)>(
-            [func](Args... args) { return boost::python::extract<R>(boost::python::incref(func(args...).ptr())); });
+        boost::python::object func = boost::python::object(boost::python::handle<>(boost::python::borrowed(obj_ptr)));
+        new (storage)
+            std::function<R(Args...)>([func](Args... args) { return boost::python::extract<R>(func(args...))(); });
         data->convertible = storage;
     }
 
@@ -51,16 +50,11 @@ template <typename Ret, typename... Args> struct builder
     static void help(PyObject* obj_ptr, boost::python::converter::rvalue_from_python_stage1_data* data,
                      typename vstd::enable_if<vstd::is_shared_ptr<R>::value>::type* = 0)
     {
-        typedef typename R::element_type* ptr_type;
         void* storage =
             ((boost::python::converter::rvalue_from_python_storage<std::function<R(Args...)>>*)data)->storage.bytes;
-        boost::python::object func =
-            boost::python::object(boost::python::handle<>(boost::python::borrowed(boost::python::incref(obj_ptr))));
-        new (storage) std::function<R(Args...)>(
-            [func](Args... args) {
-                return R(vstd::functional::call(
-                    boost::python::extract<ptr_type>(boost::python::incref(func(args...).ptr()))));
-            });
+        boost::python::object func = boost::python::object(boost::python::handle<>(boost::python::borrowed(obj_ptr)));
+        new (storage)
+            std::function<R(Args...)>([func](Args... args) { return boost::python::extract<R>(func(args...))(); });
         data->convertible = storage;
     }
 };
@@ -71,8 +65,7 @@ template <typename... Args> struct builder<void, Args...>
     {
         void* storage =
             ((boost::python::converter::rvalue_from_python_storage<std::function<void(Args...)>>*)data)->storage.bytes;
-        boost::python::object func =
-            boost::python::object(boost::python::handle<>(boost::python::borrowed(boost::python::incref(obj_ptr))));
+        boost::python::object func = boost::python::object(boost::python::handle<>(boost::python::borrowed(obj_ptr)));
         new (storage) std::function<void(Args...)>([func](Args... args) { func(args...); });
         data->convertible = storage;
     }
@@ -84,8 +77,7 @@ template <typename... Args> struct builder<bool, Args...>
     {
         void* storage =
             ((boost::python::converter::rvalue_from_python_storage<std::function<bool(Args...)>>*)data)->storage.bytes;
-        boost::python::object func =
-            boost::python::object(boost::python::handle<>(boost::python::borrowed(boost::python::incref(obj_ptr))));
+        boost::python::object func = boost::python::object(boost::python::handle<>(boost::python::borrowed(obj_ptr)));
         new (storage) std::function<bool(Args...)>([func](Args... args) { return func(args...).ptr() == Py_True; });
         data->convertible = storage;
     }

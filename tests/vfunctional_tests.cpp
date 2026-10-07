@@ -30,6 +30,77 @@ int& identity(int& value)
     return value;
 }
 
+const char& firstCharacter(const std::string& value)
+{
+    return value.front();
+}
+
+std::reference_wrapper<int>& wrapperIdentity(std::reference_wrapper<int>& value)
+{
+    return value;
+}
+
+struct ReferenceCallback
+{
+    std::string value = std::string(256, 'r');
+
+    std::string& operator()() &
+    {
+        return value;
+    }
+};
+
+struct MoveReferenceCallback
+{
+    std::unique_ptr<int> value = std::make_unique<int>(23);
+
+    std::unique_ptr<int>&& operator()() &
+    {
+        return std::move(value);
+    }
+};
+
+struct NoncopyableReferenceCallback
+{
+    std::unique_ptr<int> value = std::make_unique<int>(23);
+
+    std::unique_ptr<int>& operator()() &
+    {
+        return value;
+    }
+};
+
+struct ExplicitCopy
+{
+    int value = 29;
+
+    ExplicitCopy() = default;
+    explicit ExplicitCopy(const ExplicitCopy& other) : value(other.value) {}
+};
+
+struct ExplicitCopyCallback
+{
+    ExplicitCopy value;
+
+    const ExplicitCopy& operator()() &
+    {
+        return value;
+    }
+};
+
+struct ConstValue
+{
+    int value = 37;
+};
+
+struct ConstValueCallback
+{
+    const ConstValue operator()() &
+    {
+        return {};
+    }
+};
+
 struct Counter
 {
     int calls = 0;
@@ -54,6 +125,11 @@ struct Object
     {
         return value += increment;
     }
+
+    int& argumentReference(int& argument)
+    {
+        return ++argument;
+    }
 };
 
 struct RvalueCallable
@@ -64,9 +140,31 @@ struct RvalueCallable
 template <typename F, typename... Args>
 concept SupportsCall = requires(F callback, Args... args) { vstd::functional::call(callback, args...); };
 
+template <typename F, typename... Args>
+concept HasCallResult = requires { typename vstd::functional::detail::CallResult<F, Args...>; };
+
 static_assert(!SupportsCall<int>);
 static_assert(!SupportsCall<RvalueCallable>);
+static_assert(!SupportsCall<decltype(&add), int>);
+static_assert(!HasCallResult<int>);
+static_assert(!HasCallResult<RvalueCallable>);
+static_assert(HasCallResult<decltype(&add), int, int>);
 static_assert(std::is_same_v<decltype(vstd::functional::call(identity, std::ref(std::declval<int&>()))), int&>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(identity, 1)), int>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(firstCharacter, std::string{})), char>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(ReferenceCallback{})), std::string>);
+static_assert(
+    std::is_same_v<decltype(vstd::functional::call(std::ref(std::declval<ReferenceCallback&>()))), std::string&>);
+static_assert(
+    std::is_same_v<decltype(vstd::functional::call(std::declval<MoveReferenceCallback>())), std::unique_ptr<int>>);
+static_assert(!SupportsCall<NoncopyableReferenceCallback>);
+static_assert(SupportsCall<std::reference_wrapper<NoncopyableReferenceCallback>>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(ExplicitCopyCallback{})), ExplicitCopy>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(ConstValueCallback{})), const ConstValue>);
+static_assert(
+    std::is_same_v<decltype(vstd::functional::call(std::ref(std::declval<ConstValueCallback&>()))), const ConstValue>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(wrapperIdentity, std::ref(std::declval<int&>()))),
+                             std::reference_wrapper<int>>);
 static_assert(std::is_void_v<decltype(vstd::functional::call([]() {}))>);
 static_assert(!SupportsCall<decltype(&Object::value), Object>);
 static_assert(SupportsCall<decltype(&Object::value), Object*>);
@@ -76,6 +174,12 @@ static_assert(!SupportsCall<decltype(&Object::addReference), Object, int>);
 static_assert(SupportsCall<decltype(&Object::addReference), Object*, int>);
 static_assert(SupportsCall<decltype(&Object::addReference), std::reference_wrapper<Object>, int>);
 static_assert(!SupportsCall<decltype(&Object::addReference), std::shared_ptr<Object>, int>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(&Object::addReference, std::declval<Object*>(), 1)), int>);
+static_assert(
+    std::is_same_v<decltype(vstd::functional::call(&Object::argumentReference, std::declval<Object*>(), 1)), int>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(&Object::argumentReference, std::declval<Object*>(),
+                                                             std::ref(std::declval<int&>()))),
+                             int&>);
 
 static_assert(std::is_same_v<vstd::tuple_element<0, int, const std::string&, void>::type, int>);
 static_assert(std::is_same_v<vstd::tuple_element<1, int, const std::string&, void>::type, const std::string&>);
@@ -136,9 +240,46 @@ void checkMemberPointers()
     require(&member == &object.value, "member data pointer preserves reference return");
     member = 12;
     require(object.value == 12, "member data pointer permits mutation");
-    int& returned_member = vstd::functional::call(&Object::addReference, std::ref(object), 2);
+    int increment = 2;
+    int& returned_member = vstd::functional::call(&Object::addReference, std::ref(object), std::ref(increment));
     require(&returned_member == &object.value && returned_member == 14,
             "member function reference result retains caller-owned object state");
+
+    int argument = 20;
+    require(vstd::functional::call(&Object::argumentReference, &object, argument) == 21,
+            "member reference into a copied argument is materialized");
+    require(argument == 20, "member reference materialization retains by-value argument semantics");
+    int& borrowed_argument = vstd::functional::call(&Object::argumentReference, &object, std::ref(argument));
+    require(&borrowed_argument == &argument && argument == 21,
+            "member reference into a borrowed argument retains identity");
+}
+
+void checkReferenceResultLifetime()
+{
+    std::string argument(256, 'a');
+    auto first = vstd::functional::call(firstCharacter, argument);
+    require(first == 'a', "reference into a copied argument is materialized before destruction");
+
+    ReferenceCallback callback;
+    auto result = vstd::functional::call(callback);
+    require(result == callback.value, "reference into a copied callable is materialized before destruction");
+    std::string& borrowed = vstd::functional::call(std::ref(callback));
+    require(&borrowed == &callback.value, "explicitly borrowed callable retains reference identity");
+
+    int value = 7;
+    auto wrapper = vstd::functional::call(wrapperIdentity, std::ref(value));
+    require(&wrapper.get() == &value, "reference to a local wrapper is materialized as a borrowed handle");
+
+    auto moved_result = vstd::functional::call(MoveReferenceCallback{});
+    require(*moved_result == 23, "rvalue reference into copied callable state is moved into an owning result");
+
+    auto explicit_result = vstd::functional::call(ExplicitCopyCallback{});
+    require(explicit_result.value == 29, "materialized reference results support explicit copy constructors");
+
+    ConstValueCallback const_callback;
+    require(vstd::functional::call(const_callback).value == 37, "const value results retain their value");
+    require(vstd::functional::call(std::ref(const_callback)).value == 37,
+            "borrowed const value results retain their value");
 }
 
 void checkFunctionTraitCompatibility()
@@ -157,6 +298,7 @@ int main()
         checkCallableKinds();
         checkCopyAndReferenceSemantics();
         checkMemberPointers();
+        checkReferenceResultLifetime();
         checkFunctionTraitCompatibility();
         std::cout << "Functional invocation and tuple compatibility checks passed\n";
     }

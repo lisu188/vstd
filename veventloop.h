@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -61,7 +61,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     {
         bool operator()(const delayed_task& a, const delayed_task& b) const
         {
-            return a.due > b.due;
+            return a.due != b.due ? a.due > b.due : a.id > b.id;
         }
     };
 
@@ -71,7 +71,32 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         std::function<bool()> predicate;
         std::function<void()> function;
         std::shared_ptr<std::atomic_bool> cancelled;
+        std::atomic_bool evaluating{false};
+
+        conditional_task(std::size_t id, std::function<bool()> predicate, std::function<void()> function,
+                         std::shared_ptr<std::atomic_bool> cancelled)
+            : id(id), predicate(std::move(predicate)), function(std::move(function)), cancelled(std::move(cancelled))
+        {
+        }
     };
+
+    struct PostedTask
+    {
+        std::size_t id;
+        std::function<void()> function;
+    };
+
+    template <typename Function> struct RegisteredCallback
+    {
+        std::size_t id;
+        Function function;
+        std::atomic_bool cancelled{false};
+
+        RegisteredCallback(std::size_t id, Function function) : id(id), function(std::move(function)) {}
+    };
+
+    using frame_callback = RegisteredCallback<std::function<void(int)>>;
+    using event_callback = RegisteredCallback<std::function<bool(SDL_Event*)>>;
 
   public:
     class connection
@@ -131,7 +156,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         {
             {
                 std::lock_guard lock(taskMutex);
-                taskQueue.push(function);
+                taskQueue.push({nextPostedTaskId++, function});
             }
             wake();
             return true;
@@ -154,7 +179,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         auto cancelled = std::make_shared<std::atomic_bool>(false);
         {
             std::lock_guard lock(conditionalMutex);
-            conditionalQueue.push_back({id, predicate, function, cancelled});
+            conditionalQueue.push_back(std::make_shared<conditional_task>(id, predicate, function, cancelled));
         }
         wake();
         return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
@@ -221,14 +246,20 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     connection connectFrameCallback(const std::function<void(int)>& function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
+        auto callback = std::make_shared<frame_callback>(id, function);
         {
             std::lock_guard lock(callbackMutex);
-            frameCallbackList.emplace_back(id, function);
+            frameCallbackList.push_back(callback);
         }
         std::weak_ptr<event_loop> weakLoop = this->weak_from_this();
+        std::weak_ptr<frame_callback> weakCallback = callback;
         return connection(
-            [weakLoop, id]()
+            [weakLoop, weakCallback, id]()
             {
+                if (auto callback = weakCallback.lock())
+                {
+                    callback->cancelled.store(true, std::memory_order_release);
+                }
                 if (auto loop = weakLoop.lock())
                 {
                     loop->removeFrameCallback(id);
@@ -244,14 +275,20 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     connection connectEventCallback(const std::function<bool(SDL_Event*)>& function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
+        auto callback = std::make_shared<event_callback>(id, function);
         {
             std::lock_guard lock(callbackMutex);
-            eventCallbackList.emplace_back(id, function);
+            eventCallbackList.push_back(callback);
         }
         std::weak_ptr<event_loop> weakLoop = this->weak_from_this();
+        std::weak_ptr<event_callback> weakCallback = callback;
         return connection(
-            [weakLoop, id]()
+            [weakLoop, weakCallback, id]()
             {
+                if (auto callback = weakCallback.lock())
+                {
+                    callback->cancelled.store(true, std::memory_order_release);
+                }
                 if (auto loop = weakLoop.lock())
                 {
                     loop->removeEventCallback(id);
@@ -303,18 +340,17 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
 
         const int frameTime = static_cast<int>(SDL_GetTicks());
-        std::vector<std::function<void(int)>> callbacks;
+        std::vector<std::shared_ptr<frame_callback>> callbacks;
         {
             std::lock_guard lock(callbackMutex);
-            callbacks.reserve(frameCallbackList.size());
-            for (const auto& [id, callback] : frameCallbackList)
-            {
-                callbacks.push_back(callback);
-            }
+            callbacks.assign(frameCallbackList.begin(), frameCallbackList.end());
         }
         for (auto& callback : callbacks)
         {
-            safeInvoke([&]() { callback(frameTime); });
+            if (!callback->cancelled.load(std::memory_order_acquire))
+            {
+                safeInvoke([&]() { callback->function(frameTime); });
+            }
         }
 
         const auto now = clock::now();
@@ -460,18 +496,30 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     std::size_t drainPostedTasks()
     {
-        std::queue<std::function<void()>> ready;
+        std::size_t lastTaskId;
         {
             std::lock_guard lock(taskMutex);
-            ready.swap(taskQueue);
+            if (taskQueue.empty())
+            {
+                return 0;
+            }
+            lastTaskId = taskQueue.back().id;
         }
         wakePending.store(false, std::memory_order_relaxed);
 
         std::size_t processed = 0;
-        while (!ready.empty())
+        while (true)
         {
-            auto function = std::move(ready.front());
-            ready.pop();
+            std::function<void()> function;
+            {
+                std::lock_guard lock(taskMutex);
+                if (taskQueue.empty() || taskQueue.front().id > lastTaskId)
+                {
+                    break;
+                }
+                function = std::move(taskQueue.front().function);
+                taskQueue.pop();
+            }
             safeInvoke(function);
             ++processed;
         }
@@ -495,19 +543,19 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
                 continue;
             }
 
-            std::vector<std::function<bool(SDL_Event*)>> callbacks;
+            std::vector<std::shared_ptr<event_callback>> callbacks;
             {
                 std::lock_guard lock(callbackMutex);
-                callbacks.reserve(eventCallbackList.size());
-                for (const auto& [id, callback] : eventCallbackList)
-                {
-                    callbacks.push_back(callback);
-                }
+                callbacks.assign(eventCallbackList.begin(), eventCallbackList.end());
             }
             for (auto& callback : callbacks)
             {
+                if (callback->cancelled.load(std::memory_order_acquire))
+                {
+                    continue;
+                }
                 bool handled = false;
-                safeInvoke([&]() { handled = callback(&event); });
+                safeInvoke([&]() { handled = callback->function(&event); });
                 if (handled)
                 {
                     break;
@@ -519,7 +567,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     std::size_t processConditions()
     {
-        std::vector<conditional_task> conditions;
+        std::vector<std::shared_ptr<conditional_task>> conditions;
         {
             std::lock_guard lock(conditionalMutex);
             conditions.assign(conditionalQueue.begin(), conditionalQueue.end());
@@ -528,23 +576,36 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         std::size_t processed = 0;
         for (auto& conditionTask : conditions)
         {
-            if (conditionTask.cancelled->load(std::memory_order_relaxed))
+            if (conditionTask->cancelled->load(std::memory_order_acquire))
             {
-                removeCondition(conditionTask.id);
+                removeCondition(conditionTask->id);
                 continue;
             }
+            if (conditionTask->evaluating.exchange(true, std::memory_order_acquire))
+            {
+                continue;
+            }
+            struct EvaluationGuard
+            {
+                std::atomic_bool& evaluating;
+
+                ~EvaluationGuard()
+                {
+                    evaluating.store(false, std::memory_order_release);
+                }
+            } resetEvaluation{conditionTask->evaluating};
 
             bool ready = false;
-            safeInvoke([&]() { ready = conditionTask.predicate(); });
-            if (!ready)
+            safeInvoke([&]() { ready = conditionTask->predicate(); });
+            if (ready && removeCondition(conditionTask->id) &&
+                !conditionTask->cancelled->exchange(true, std::memory_order_acq_rel))
             {
-                continue;
-            }
-
-            if (removeCondition(conditionTask.id))
-            {
-                safeInvoke(conditionTask.function);
+                safeInvoke(conditionTask->function);
                 ++processed;
+            }
+            if (conditionTask->cancelled->load(std::memory_order_acquire))
+            {
+                removeCondition(conditionTask->id);
             }
         }
         return processed;
@@ -552,20 +613,26 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     std::size_t processDelays()
     {
-        std::vector<delayed_task> ready;
         const auto now = clock::now();
+        std::size_t limitId;
         {
             std::lock_guard lock(delayMutex);
-            while (!delayQueue.empty() && delayQueue.top().due <= now)
-            {
-                ready.push_back(delayQueue.top());
-                delayQueue.pop();
-            }
+            limitId = nextId.load(std::memory_order_relaxed);
         }
 
         std::size_t processed = 0;
-        for (auto& delayed : ready)
+        while (true)
         {
+            delayed_task delayed;
+            {
+                std::lock_guard lock(delayMutex);
+                if (delayQueue.empty() || delayQueue.top().due > now || delayQueue.top().id >= limitId)
+                {
+                    break;
+                }
+                delayed = delayQueue.top();
+                delayQueue.pop();
+            }
             if (!delayed.cancelled->load(std::memory_order_relaxed))
             {
                 safeInvoke(delayed.function);
@@ -587,22 +654,22 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void reportException(std::exception_ptr error)
+    void reportException(std::exception_ptr error) noexcept
     {
-        std::function<void(std::exception_ptr)> handler;
+        try
         {
-            std::lock_guard lock(exceptionMutex);
-            handler = exceptionHandler;
-        }
-        if (handler)
-        {
-            try
+            std::function<void(std::exception_ptr)> handler;
+            {
+                std::lock_guard lock(exceptionMutex);
+                handler = exceptionHandler;
+            }
+            if (handler)
             {
                 handler(error);
             }
-            catch (...)
-            {
-            }
+        }
+        catch (...)
+        {
         }
     }
 
@@ -611,7 +678,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         std::lock_guard lock(conditionalMutex);
         for (auto iterator = conditionalQueue.begin(); iterator != conditionalQueue.end(); ++iterator)
         {
-            if (iterator->id == id)
+            if ((*iterator)->id == id)
             {
                 conditionalQueue.erase(iterator);
                 return true;
@@ -623,13 +690,13 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     void removeFrameCallback(std::size_t id)
     {
         std::lock_guard lock(callbackMutex);
-        frameCallbackList.remove_if([id](const auto& item) { return item.first == id; });
+        frameCallbackList.remove_if([id](const auto& item) { return item->id == id; });
     }
 
     void removeEventCallback(std::size_t id)
     {
         std::lock_guard lock(callbackMutex);
-        eventCallbackList.remove_if([id](const auto& item) { return item.first == id; });
+        eventCallbackList.remove_if([id](const auto& item) { return item->id == id; });
     }
 
     clock::time_point lastFrameTime;
@@ -642,17 +709,18 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     std::atomic_size_t nextId{1};
 
     mutable std::mutex taskMutex;
-    std::queue<std::function<void()>> taskQueue;
+    std::queue<PostedTask> taskQueue;
+    std::size_t nextPostedTaskId = 0;
 
     mutable std::mutex delayMutex;
     std::priority_queue<delayed_task, std::vector<delayed_task>, delay_compare> delayQueue;
 
     mutable std::mutex conditionalMutex;
-    std::list<conditional_task> conditionalQueue;
+    std::list<std::shared_ptr<conditional_task>> conditionalQueue;
 
     mutable std::mutex callbackMutex;
-    std::list<std::pair<std::size_t, std::function<void(int)>>> frameCallbackList;
-    std::list<std::pair<std::size_t, std::function<bool(SDL_Event*)>>> eventCallbackList;
+    std::list<std::shared_ptr<frame_callback>> frameCallbackList;
+    std::list<std::shared_ptr<event_callback>> eventCallbackList;
 
     mutable std::mutex exceptionMutex;
     std::function<void(std::exception_ptr)> exceptionHandler;

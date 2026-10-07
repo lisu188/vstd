@@ -357,10 +357,23 @@ template <typename T> static void deallocate(T* t, size_t size)
     _pool.deallocate(t, size);
 }
 
-template <typename T> typename T::value_type* as_array(T vec)
+// The caller must destroy nontrivial elements before returning their storage with deallocate.
+template <typename T> typename T::value_type* as_array(const T& vec)
 {
+    if (vec.size() == 0)
+    {
+        return nullptr;
+    }
     auto ret = vstd::allocate<typename T::value_type>(vec.size());
-    std::copy(std::begin(vec), std::end(vec), ret);
+    try
+    {
+        std::uninitialized_copy(std::begin(vec), std::end(vec), ret);
+    }
+    catch (...)
+    {
+        vstd::deallocate(ret, vec.size());
+        throw;
+    }
     return ret;
 }
 
@@ -409,8 +422,9 @@ template <typename A, typename B, typename... Args> bool all_equals(A a, B b, Ar
 
 template <typename T, typename... Args> std::set<T> set(T arg, Args... args)
 {
-    std::set<T> ret = vstd::set(args...);
+    std::set<T> ret;
     ret.insert(arg);
+    (ret.insert(args), ...);
     return ret;
 }
 
@@ -423,8 +437,9 @@ template <typename T> std::set<T> set(T arg)
 
 template <typename T, typename... Args> std::list<T> as_list(T arg, Args... args)
 {
-    std::list<T> ret = vstd::as_list(args...);
+    std::list<T> ret;
     ret.push_back(arg);
+    (ret.push_back(args), ...);
     return ret;
 }
 
