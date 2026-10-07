@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -40,18 +40,23 @@ namespace vstd
 class stringable
 {
   public:
+    virtual ~stringable() = default;
     virtual std::string to_string() = 0;
 };
 
 template <typename T = void> std::string replace(std::string str, const std::string& from, const std::string& to)
 {
-    size_t start_pos = str.find(from);
-    if (start_pos == std::string::npos)
+    if (from.empty())
     {
         return str;
     }
-    str.replace(start_pos, from.length(), to);
-    return replace(str, from, to);
+    std::size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos)
+    {
+        str.replace(start_pos, from.size(), to);
+        start_pos += to.size();
+    }
+    return str;
 }
 
 template <typename T = void> std::string ltrim(std::string s)
@@ -73,7 +78,7 @@ template <typename T = void> std::string trim(const std::string& s)
 
 template <typename T = void> bool is_empty(const std::string& string)
 {
-    return trim(string).length() == 0;
+    return trim(string).empty();
 }
 
 template <typename T> std::string str(T c)
@@ -97,7 +102,7 @@ inline std::string str(const std::shared_ptr<stringable>& c)
 
 template <typename T = void> std::pair<int, bool> to_int(const std::string& s)
 {
-    if (isdigit(s[0]))
+    if (!s.empty() && std::isdigit(static_cast<unsigned char>(s.front())))
     {
         try
         {
@@ -155,14 +160,7 @@ template <typename T, typename U> bool string_equals(T a, U b)
 
 template <typename T = void> bool ends_with(const std::string& full_string, const std::string& ending)
 {
-    if (full_string.length() >= ending.length())
-    {
-        return (0 == full_string.compare(full_string.length() - ending.length(), ending.length(), ending));
-    }
-    else
-    {
-        return false;
-    }
+    return full_string.ends_with(ending);
 }
 
 template <typename T = void> wchar_t* to_wchar(const char* text)
@@ -198,7 +196,7 @@ template <typename T = void> void add_line(std::string& org, const std::string& 
 
 template <typename T = void> std::string camel(std::string org)
 {
-    if (org.find(' ') != std::string::npos)
+    if (org.contains(' '))
     {
         std::string ret;
         for (const auto& str : split(org, ' '))

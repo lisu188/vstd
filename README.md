@@ -4,6 +4,10 @@
 asynchronous execution, type utilities, reflection, logging, conversion helpers, and
 small algorithmic/data-structure conveniences.
 
+The build requires C++23 with compiler extensions disabled. See the
+[C++ guidelines](docs/cpp-guidelines.md) for supported standard-library idioms,
+compatibility contracts, and validation requirements.
+
 ## Design overview
 
 - **Header-first distribution**: most functionality lives in `v*.h` headers and can be
