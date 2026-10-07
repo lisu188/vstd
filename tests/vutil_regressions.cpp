@@ -6,6 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -100,6 +101,15 @@ void checkBuilders()
             "single-argument builders remain supported");
 }
 
+std::string pointerStream(const void* pointer)
+{
+    std::ostringstream stream;
+    stream << std::hex << pointer;
+    return boost::to_upper_copy(stream.str());
+}
+
+void pointerTarget() {}
+
 void checkPointerHex()
 {
     int value = 42;
@@ -107,11 +117,30 @@ void checkPointerHex()
             "raw pointer uses its integer representation");
     require(vstd::to_hex(static_cast<int*>(nullptr)) == "0", "null raw pointer");
     auto shared = std::make_shared<int>(42);
-    require(vstd::to_hex(shared) == vstd::to_hex(shared.get()), "shared and raw pointers use the same representation");
+    require(vstd::to_hex(shared) == vstd::to_hex<int*>(shared.get()),
+            "shared pointer retains legacy stream formatting");
+    require(vstd::to_hex(shared) == pointerStream(shared.get()), "shared pointer uses native address formatting");
     auto character = std::make_shared<char>('a');
-    require(vstd::to_hex(character) == vstd::to_hex(reinterpret_cast<std::uintptr_t>(character.get())),
+    require(vstd::to_hex(character) == pointerStream(character.get()),
             "shared character pointers format an address rather than read a C string");
-    require(vstd::to_hex(std::shared_ptr<char>{}) == "0", "empty shared pointer");
+    auto characters = std::make_shared<char[]>(2);
+    characters[0] = 'a';
+    characters[1] = '\0';
+    require(vstd::to_hex(characters) == pointerStream(characters.get()), "shared character array formats an address");
+    auto volatile_character = std::make_shared<volatile char>('v');
+    require(vstd::to_hex(volatile_character) == pointerStream(const_cast<const char*>(volatile_character.get())),
+            "shared volatile character formats an address");
+    require(vstd::to_hex(std::shared_ptr<char>{}) == pointerStream(nullptr), "empty shared character pointer");
+    require(vstd::to_hex(std::shared_ptr<int>{}) == pointerStream(nullptr), "empty shared object pointer");
+    require(vstd::to_hex(std::shared_ptr<void>{}) == pointerStream(nullptr), "empty shared void pointer");
+    std::shared_ptr<const void> erased = shared;
+    require(vstd::to_hex(erased) == pointerStream(erased.get()), "shared void pointer formats an address");
+    using Function = void();
+    std::shared_ptr<Function> function(&pointerTarget, [](Function*) {});
+    require(vstd::to_hex(function) == vstd::to_hex<Function*>(function.get()),
+            "shared function pointer retains legacy stream formatting");
+    require(vstd::to_hex(std::shared_ptr<Function>{}) == vstd::to_hex<Function*>(nullptr),
+            "empty shared function pointer retains legacy stream formatting");
 }
 
 void checkWideHash()
