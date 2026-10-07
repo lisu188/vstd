@@ -80,9 +80,18 @@ template <typename F, typename... Args> constexpr bool borrowsReferenceResult()
     }
 }
 
+template <bool Invocable, typename F, typename... Args> struct CallResultType
+{
+};
+
+template <typename F, typename... Args> struct CallResultType<true, F, Args...>
+{
+    using type = std::conditional_t<borrowsReferenceResult<F, Args...>(), std::invoke_result_t<F&, Args&...>,
+                                    std::remove_cvref_t<std::invoke_result_t<F&, Args&...>>>;
+};
+
 template <typename F, typename... Args>
-using CallResult = std::conditional_t<borrowsReferenceResult<F, Args...>(), std::invoke_result_t<F&, Args&...>,
-                                      std::remove_cvref_t<std::invoke_result_t<F&, Args&...>>>;
+using CallResult = typename CallResultType<std::is_invocable_v<F&, Args&...>, F, Args...>::type;
 
 template <typename F, typename... Args> constexpr bool canReturnResult()
 {

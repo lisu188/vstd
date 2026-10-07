@@ -127,8 +127,15 @@ struct RvalueCallable
 template <typename F, typename... Args>
 concept SupportsCall = requires(F callback, Args... args) { vstd::functional::call(callback, args...); };
 
+template <typename F, typename... Args>
+concept HasCallResult = requires { typename vstd::functional::detail::CallResult<F, Args...>; };
+
 static_assert(!SupportsCall<int>);
 static_assert(!SupportsCall<RvalueCallable>);
+static_assert(!SupportsCall<decltype(&add), int>);
+static_assert(!HasCallResult<int>);
+static_assert(!HasCallResult<RvalueCallable>);
+static_assert(HasCallResult<decltype(&add), int, int>);
 static_assert(std::is_same_v<decltype(vstd::functional::call(identity, std::ref(std::declval<int&>()))), int&>);
 static_assert(std::is_same_v<decltype(vstd::functional::call(identity, 1)), int>);
 static_assert(std::is_same_v<decltype(vstd::functional::call(firstCharacter, std::string{})), char>);
