@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -19,26 +19,23 @@
 #pragma once
 
 #include <cstddef>
+#include <tuple>
 
 namespace vstd
 {
 
-template <std::size_t __i, typename _Head, typename... _Tail> struct tuple_element : tuple_element<__i - 1, _Tail...>
+template <std::size_t Index, typename Head, typename... Tail>
+struct tuple_element : std::tuple_element<Index, std::tuple<Head, Tail...>>
 {
 };
 
-template <typename _Head, typename... _Tail> struct tuple_element<0, _Head, _Tail...>
+template <typename Head = void, typename... Tail> struct tuple_size
 {
-    typedef _Head type;
-};
-
-template <typename _Head = void, typename... _Tail> struct tuple_size
-{
-    static constexpr size_t size = tuple_size<_Tail...>::size + 1;
+    static constexpr std::size_t size = tuple_size<Tail...>::size + 1;
 };
 
 template <> struct tuple_size<void>
 {
-    static constexpr size_t size = 0;
+    static constexpr std::size_t size = 0;
 };
 } // namespace vstd

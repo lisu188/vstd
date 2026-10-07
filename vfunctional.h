@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -17,7 +17,11 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #pragma once
+#include <concepts>
+#include <functional>
 #include <set>
+#include <tuple>
+#include <type_traits>
 #include <unordered_map>
 
 #include "vtraits.h"
@@ -26,22 +30,32 @@ namespace vstd
 {
 namespace functional
 {
-template <typename F, typename... Args>
-
-typename disable_if<is_void<typename function_traits<F>::return_type>::value,
-                    typename function_traits<F>::return_type>::type
-call(F f, Args... args)
+namespace detail
 {
-    return f(args...);
+template <typename T> struct IsReferenceWrapper : std::false_type
+{
+};
+
+template <typename T> struct IsReferenceWrapper<std::reference_wrapper<T>> : std::true_type
+{
+};
+
+template <typename F, typename... Args> constexpr bool allowsMemberReferenceResult()
+{
+    if constexpr (std::is_member_pointer_v<F> && std::is_reference_v<std::invoke_result_t<F&, Args&...>>)
+    {
+        using Receiver = std::tuple_element_t<0, std::tuple<Args...>>;
+        return std::is_pointer_v<Receiver> || IsReferenceWrapper<Receiver>::value;
+    }
+    return true;
 }
+} // namespace detail
 
 template <typename F, typename... Args>
-
-typename enable_if<is_void<typename function_traits<F>::return_type>::value,
-                   typename function_traits<F>::return_type>::type
-call(F f, Args... args)
+    requires std::invocable<F&, Args&...> && (detail::allowsMemberReferenceResult<F, Args...>())
+decltype(auto) call(F f, Args... args)
 {
-    f(args...);
+    return std::invoke(f, args...);
 }
 
 template <typename Return, typename Container, typename Func> Return map(Container& container, Func f)
