@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -190,20 +190,45 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
     {
         std::vector<continuation> callbacks;
         std::optional<X> callbackValue;
+        std::exception_ptr error;
         {
             std::unique_lock lock(mutex);
             if (state != future_state::pending)
             {
                 return;
             }
-            result.emplace(std::move(value));
-            state = future_state::value;
-            callbackValue = *result;
+            try
+            {
+                result.emplace(std::move(value));
+                callbackValue.emplace(*result);
+                state = future_state::value;
+            }
+            catch (...)
+            {
+                error = std::current_exception();
+                exception = error;
+                result.reset();
+                state = future_state::exception;
+            }
             callbacks.swap(continuations);
         }
         condition.notify_all();
         for (auto& callback : callbacks)
         {
+            if (error)
+            {
+                if (callback.failure)
+                {
+                    try
+                    {
+                        callback.failure(error);
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+                continue;
+            }
             if (!callback.success)
             {
                 continue;
@@ -322,7 +347,13 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
         {
             if (callback.failure)
             {
-                callback.failure(error);
+                try
+                {
+                    callback.failure(error);
+                }
+                catch (...)
+                {
+                }
             }
         }
     }
@@ -434,7 +465,18 @@ class ccall : public std::enable_shared_from_this<ccall<return_type, argument_ty
             settledException = exception;
             if constexpr (non_void_type<return_type>)
             {
-                settledResult = result;
+                if (settledState == future_state::value)
+                {
+                    try
+                    {
+                        settledResult.emplace(*result);
+                    }
+                    catch (...)
+                    {
+                        settledState = future_state::exception;
+                        settledException = std::current_exception();
+                    }
+                }
             }
         }
 
@@ -721,7 +763,6 @@ auto when_all(const std::vector<std::shared_ptr<future<T, Arg>>>& futures)
                     state->values[index] = std::move(value);
                     if (--state->remaining == 0)
                     {
-                        state->settled = true;
                         result_type values;
                         values.reserve(state->values.size());
                         for (auto& item : state->values)
@@ -729,6 +770,7 @@ auto when_all(const std::vector<std::shared_ptr<future<T, Arg>>>& futures)
                             values.push_back(*item);
                         }
                         ready = std::move(values);
+                        state->settled = true;
                     }
                 }
                 if (ready)

@@ -8,6 +8,22 @@ The build requires C++23 with compiler extensions disabled. See the
 [C++ guidelines](docs/cpp-guidelines.md) for supported standard-library idioms,
 compatibility contracts, and validation requirements.
 
+The optional SDL event-loop and Boost.Python converter regression targets run when
+their development packages are installed. CI configures with
+`-DVSTD_REQUIRE_INTEGRATION_TESTS=ON` so missing dependencies fail configuration.
+The SDL tests initialize only the events subsystem and run without a display.
+
+`as_array` returns copy-constructed elements in pool-allocated storage. Destroy
+nontrivial elements with `std::destroy_n(pointer, count)` before returning the raw
+storage with `vstd::deallocate(pointer, count)`. A failed copy destroys partial
+elements and releases their storage; an empty input returns `nullptr`.
+
+An external `thread_pool::stop()` waits for the currently active generation's queued work and workers to finish.
+Stopping from any worker generation of that pool requests shutdown asynchronously,
+allowing that task and dependent peer tasks to finish. Restarting creates an independent queue.
+Custom worker templates receive a shared queue state exposing `pop_task`; a worker
+must not retain shared ownership of the pool itself.
+
 ## Design overview
 
 - **Header-first distribution**: most functionality lives in `v*.h` headers and can be

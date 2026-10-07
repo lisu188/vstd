@@ -49,13 +49,63 @@ template <typename F, typename... Args> constexpr bool allowsMemberReferenceResu
     }
     return true;
 }
+
+template <typename... Args> struct BorrowsMemberArguments : std::false_type
+{
+};
+
+template <typename Receiver, typename... Args>
+struct BorrowsMemberArguments<Receiver, Args...>
+    : std::bool_constant<(std::is_pointer_v<Receiver> || IsReferenceWrapper<Receiver>::value) &&
+                         (IsReferenceWrapper<Args>::value && ...)>
+{
+};
+
+template <typename F, typename... Args> constexpr bool borrowsReferenceResult()
+{
+    using Result = std::invoke_result_t<F&, Args&...>;
+    if constexpr (IsReferenceWrapper<std::remove_cvref_t<Result>>::value)
+    {
+        return false;
+    }
+    else if constexpr (std::is_member_pointer_v<F>)
+    {
+        return BorrowsMemberArguments<Args...>::value;
+    }
+    else
+    {
+        constexpr bool borrows_callable =
+            IsReferenceWrapper<F>::value || (std::is_pointer_v<F> && std::is_function_v<std::remove_pointer_t<F>>);
+        return borrows_callable && (IsReferenceWrapper<Args>::value && ...);
+    }
+}
+
+template <typename F, typename... Args>
+using CallResult = std::conditional_t<borrowsReferenceResult<F, Args...>(), std::invoke_result_t<F&, Args&...>,
+                                      std::remove_cvref_t<std::invoke_result_t<F&, Args&...>>>;
+
+template <typename F, typename... Args> constexpr bool canReturnResult()
+{
+    using Result = std::invoke_result_t<F&, Args&...>;
+    return !std::is_reference_v<Result> || borrowsReferenceResult<F, Args...>() ||
+           std::is_constructible_v<std::remove_cvref_t<Result>, Result>;
+}
 } // namespace detail
 
 template <typename F, typename... Args>
-    requires std::invocable<F&, Args&...> && (detail::allowsMemberReferenceResult<F, Args...>())
-decltype(auto) call(F f, Args... args)
+    requires std::invocable<F&, Args&...> && (detail::allowsMemberReferenceResult<F, Args...>()) &&
+             (detail::canReturnResult<F, Args...>())
+detail::CallResult<F, Args...> call(F f, Args... args)
 {
-    return std::invoke(f, args...);
+    using Result = detail::CallResult<F, Args...>;
+    if constexpr (std::is_reference_v<std::invoke_result_t<F&, Args&...>> && !std::is_reference_v<Result>)
+    {
+        return Result(std::invoke(f, args...));
+    }
+    else
+    {
+        return std::invoke(f, args...);
+    }
 }
 
 template <typename Return, typename Container, typename Func> Return map(Container& container, Func f)

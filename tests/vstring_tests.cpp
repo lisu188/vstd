@@ -46,6 +46,10 @@ void checkStringPredicates()
     require(vstd::ends_with(std::string("a\0b", 3), std::string("\0b", 2)), "binary suffix");
     require(vstd::camel("hello world") == "Hello World ", "preserve title-case spacing");
     require(vstd::camel("word") == "Word", "single word");
+    require(vstd::camel("").empty(), "empty title text");
+    require(vstd::camel(" hello") == " Hello ", "leading empty word preserves spacing");
+    require(vstd::camel("hello  world") == "Hello  World ", "repeated spaces preserve empty words");
+    require(vstd::camel(" ") == " ", "whitespace-only title text");
 }
 
 void checkIntegerContract()

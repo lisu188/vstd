@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -87,8 +87,189 @@ std::function<void(int, std::function<void()>)> get_call_delayed_later_handler()
 }
 } // namespace vstd
 
+namespace
+{
+struct ThrowingCopy
+{
+    ThrowingCopy() = default;
+    ThrowingCopy(const ThrowingCopy&)
+    {
+        throw std::runtime_error("result copy failure");
+    }
+    ThrowingCopy(ThrowingCopy&&) = default;
+    ThrowingCopy& operator=(const ThrowingCopy&) = default;
+    ThrowingCopy& operator=(ThrowingCopy&&) = default;
+};
+
+struct CountedThrowingCopy
+{
+    static inline int copies = 0;
+    static inline int fail_at = 0;
+    int value = 17;
+
+    CountedThrowingCopy() = default;
+    CountedThrowingCopy(const CountedThrowingCopy& other) : value(other.value)
+    {
+        if (++copies == fail_at)
+        {
+            throw std::runtime_error("aggregate copy failure");
+        }
+    }
+    CountedThrowingCopy(CountedThrowingCopy&&) = default;
+    CountedThrowingCopy& operator=(const CountedThrowingCopy&) = default;
+    CountedThrowingCopy& operator=(CountedThrowingCopy&&) = default;
+};
+
+void testCancellationObservers()
+{
+    auto call = vstd::detail::make_now(vstd::make_function([]() { return 1; }));
+    auto pending = std::make_shared<vstd::future<int, void>>(call, false);
+    pending->onComplete([](int) {}, [](std::exception_ptr) { throw std::runtime_error("observer failure"); });
+    auto child = pending->thenNow([](int value) { return value + 1; });
+    bool observed = false;
+    pending->onComplete([](int) {}, [&observed](std::exception_ptr) { observed = true; });
+
+    bool cancellation_threw = false;
+    try
+    {
+        pending->cancel();
+    }
+    catch (...)
+    {
+        cancellation_threw = true;
+    }
+    assert(!cancellation_threw);
+    assert(observed);
+    assert(pending->isReady() && pending->hasError());
+    assert(child->isReady() && child->hasError());
+    bool cancellation_rethrown = false;
+    try
+    {
+        child->get();
+    }
+    catch (const vstd::future_cancelled&)
+    {
+        cancellation_rethrown = true;
+    }
+    assert(cancellation_rethrown);
+}
+
+void testResultCopyFailure()
+{
+    auto call = vstd::detail::make_now(vstd::make_function([]() { return ThrowingCopy{}; }));
+    auto pending = std::make_shared<vstd::future<ThrowingCopy, void>>(call, false);
+    pending->onComplete([](ThrowingCopy) {}, [](std::exception_ptr) { throw std::runtime_error("observer failure"); });
+    auto child = pending->thenNow([](ThrowingCopy) { return 1; });
+    int failures = 0;
+    pending->onComplete([](ThrowingCopy) {}, [&failures](std::exception_ptr) { ++failures; });
+
+    call->call();
+
+    assert(pending->isReady() && pending->hasError());
+    assert(child->isReady() && child->hasError());
+    assert(failures == 1);
+    pending->onComplete([](ThrowingCopy) {}, [&failures](std::exception_ptr) { ++failures; });
+    assert(failures == 2);
+    bool copy_failure_rethrown = false;
+    try
+    {
+        child->get();
+    }
+    catch (const std::runtime_error& error)
+    {
+        copy_failure_rethrown = std::string(error.what()) == "result copy failure";
+    }
+    assert(copy_failure_rethrown);
+}
+
+void testAggregateCopyFailure()
+{
+    bool downstream_failure = false;
+    for (int fail_at = 1; fail_at <= 12; ++fail_at)
+    {
+        auto call = vstd::detail::make_now(vstd::make_function([]() { return CountedThrowingCopy{}; }));
+        auto pending = std::make_shared<vstd::future<CountedThrowingCopy, void>>(call, false);
+        auto combined = vstd::when_all(std::vector{pending});
+        auto child = combined->thenNow([](std::vector<CountedThrowingCopy> values) { return values.front().value; });
+
+        CountedThrowingCopy::copies = 0;
+        CountedThrowingCopy::fail_at = fail_at;
+        call->setResult(CountedThrowingCopy{});
+        CountedThrowingCopy::fail_at = 0;
+
+        assert(pending->isReady());
+        assert(combined->isReady());
+        assert(child->isReady());
+        downstream_failure = downstream_failure || (!pending->hasError() && combined->hasError());
+        if (child->hasError())
+        {
+            bool copy_failure_rethrown = false;
+            try
+            {
+                child->get();
+            }
+            catch (const std::runtime_error& error)
+            {
+                copy_failure_rethrown = std::string(error.what()) == "aggregate copy failure";
+            }
+            assert(copy_failure_rethrown);
+        }
+        else
+        {
+            assert(child->get() == 17);
+        }
+    }
+    assert(downstream_failure);
+}
+
+void testReadyResultCopyFailure()
+{
+    auto ready = vstd::make_ready_future(CountedThrowingCopy{});
+    bool succeeded = false;
+    bool failed = false;
+    bool escaped = false;
+    CountedThrowingCopy::copies = 0;
+    CountedThrowingCopy::fail_at = 1;
+    try
+    {
+        ready->onComplete([&succeeded](CountedThrowingCopy) { succeeded = true; },
+                          [&ready, &failed](std::exception_ptr error)
+                          {
+                              assert(ready->isReady() && !ready->hasError());
+                              try
+                              {
+                                  std::rethrow_exception(error);
+                              }
+                              catch (const std::runtime_error& exception)
+                              {
+                                  failed = std::string(exception.what()) == "aggregate copy failure";
+                              }
+                          });
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    CountedThrowingCopy::fail_at = 0;
+    assert(!escaped && failed && !succeeded);
+    assert(ready->get().value == 17);
+
+    CountedThrowingCopy::copies = 0;
+    CountedThrowingCopy::fail_at = 1;
+    auto child = ready->thenNow([](CountedThrowingCopy value) { return value.value; });
+    CountedThrowingCopy::fail_at = 0;
+    assert(ready->isReady() && !ready->hasError());
+    assert(child->isReady() && child->hasError());
+}
+} // namespace
+
 int main()
 {
+    testCancellationObservers();
+    testResultCopyFailure();
+    testAggregateCopyFailure();
+    testReadyResultCopyFailure();
+
     auto ready = vstd::make_ready_future(7);
     assert(ready->isReady());
     assert(ready->get() == 7);

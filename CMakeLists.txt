@@ -82,12 +82,60 @@ if(VSTD_BUILD_BENCHMARKS)
     target_include_directories(vneuro_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
-foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests vfunctional_tests vstring_tests)
+foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests vfunctional_tests vstring_tests
+                  vbind_tests vutil_regressions vthreadpool_regressions)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${TEST_NAME} PRIVATE Threads::Threads)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    if(MSVC)
+        target_compile_options(${TEST_NAME} PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(${TEST_NAME} PRIVATE -UNDEBUG)
+    endif()
 endforeach()
+set_tests_properties(vfuture_regressions vthreadpool_regressions PROPERTIES TIMEOUT 20)
+
+option(VSTD_REQUIRE_INTEGRATION_TESTS "Require SDL2 and Boost.Python regression dependencies" OFF)
+if(VSTD_REQUIRE_INTEGRATION_TESTS)
+    set(VSTD_INTEGRATION_FIND_MODE REQUIRED)
+else()
+    set(VSTD_INTEGRATION_FIND_MODE QUIET)
+endif()
+find_package(SDL2 ${VSTD_INTEGRATION_FIND_MODE})
+if(SDL2_FOUND)
+    add_executable(vruntime_regressions tests/vruntime_regressions.cpp)
+    target_include_directories(vruntime_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(vruntime_regressions PRIVATE SDL_MAIN_HANDLED)
+    target_link_libraries(vruntime_regressions PRIVATE SDL2::SDL2 Threads::Threads)
+    add_test(NAME vruntime_regressions COMMAND vruntime_regressions)
+    set_tests_properties(vruntime_regressions PROPERTIES TIMEOUT 20
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy" LABELS performance)
+    if(MSVC)
+        target_compile_options(vruntime_regressions PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(vruntime_regressions PRIVATE -UNDEBUG)
+    endif()
+else()
+    message(STATUS "SDL2 not found: headless event-loop regression tests are unavailable")
+endif()
+
+find_package(Python3 ${VSTD_INTEGRATION_FIND_MODE} COMPONENTS Development)
+if(Python3_Development_FOUND)
+    set(VSTD_BOOST_PYTHON_COMPONENT python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR})
+    find_package(Boost 1.58 ${VSTD_INTEGRATION_FIND_MODE} COMPONENTS ${VSTD_BOOST_PYTHON_COMPONENT})
+    if(TARGET Boost::${VSTD_BOOST_PYTHON_COMPONENT})
+        add_executable(vconverter_regressions tests/vconverter_regressions.cpp)
+        target_include_directories(vconverter_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        target_link_libraries(vconverter_regressions PRIVATE Boost::${VSTD_BOOST_PYTHON_COMPONENT} Python3::Python)
+        add_test(NAME vconverter_regressions COMMAND vconverter_regressions)
+        set_tests_properties(vconverter_regressions PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+    else()
+        message(STATUS "Boost.Python not found: callback converter regression tests are unavailable")
+    endif()
+else()
+    message(STATUS "Python development files not found: callback converter regression tests are unavailable")
+endif()
 
 set(HEADER_SELF_SUFFICIENCY_FILES ${SOURCE_FILES})
 # vconverter.h depends on Boost.Python/Python development headers, which are not part of this target's configured deps.
@@ -126,6 +174,11 @@ if(CLANG_FORMAT_EXE)
             tests/vrandom_tests.cpp
             tests/vfunctional_tests.cpp
             tests/vstring_tests.cpp
+            tests/vbind_tests.cpp
+            tests/vutil_regressions.cpp
+            tests/vthreadpool_regressions.cpp
+            tests/vruntime_regressions.cpp
+            tests/vconverter_regressions.cpp
             benchmarks/vneuro_bench.cpp)
 
     add_custom_target(format
