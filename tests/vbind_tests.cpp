@@ -72,6 +72,13 @@ struct ExplicitCopy
 template <typename Binder>
 concept SupportsNullaryBinder = requires(Binder& binder) { binder(); };
 
+using UnaryBinder = decltype(vstd::partial::bind([](int value) { return value; }));
+static_assert(!SupportsNullaryBinder<UnaryBinder>);
+static_assert(!std::is_invocable_v<UnaryBinder&>);
+static_assert(!std::is_invocable_v<UnaryBinder&, const char*>);
+static_assert(std::is_invocable_v<UnaryBinder&, int>);
+static_assert(std::is_invocable_v<UnaryBinder&, int&>);
+
 using ReferenceBinder = decltype(vstd::partial::bind(ReferenceSource{}));
 static_assert(std::is_same_v<decltype(std::declval<ReferenceBinder&>()()), int&>);
 using IdentityBinder = decltype(vstd::partial::bind(identity, 3));

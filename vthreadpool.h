@@ -32,15 +32,15 @@ namespace vstd
 {
 namespace detail
 {
-class thread_pool_worker_scope
+class ThreadPoolWorkerScope
 {
   public:
-    explicit thread_pool_worker_scope(const void* identity) : previousIdentity(activeIdentity)
+    explicit ThreadPoolWorkerScope(const void* identity) : previousIdentity(activeIdentity)
     {
         activeIdentity = identity;
     }
 
-    ~thread_pool_worker_scope()
+    ~ThreadPoolWorkerScope()
     {
         activeIdentity = previousIdentity;
     }
@@ -55,7 +55,7 @@ class thread_pool_worker_scope
     const void* previousIdentity;
 };
 
-class thread_pool_queue
+class ThreadPoolQueue
 {
   public:
     void push_task(std::function<void()> task)
@@ -131,7 +131,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
 
     template <typename F, typename... Args> void execute(F&& f, Args&&... args)
     {
-        std::shared_ptr<detail::thread_pool_queue> queue;
+        std::shared_ptr<detail::ThreadPoolQueue> queue;
         {
             std::unique_lock lock(_worker_lock);
             queue = _queue;
@@ -149,7 +149,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         }
         if (_hasStarted)
         {
-            _queue = std::make_shared<detail::thread_pool_queue>();
+            _queue = std::make_shared<detail::ThreadPoolQueue>();
         }
         _hasStarted = true;
         _started = true;
@@ -160,7 +160,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
                 _workers.emplace_back(
                     [worker = worker_thread(), queue = _queue, identity = _identity](std::stop_token token) mutable
                     {
-                        detail::thread_pool_worker_scope scope(identity.get());
+                        detail::ThreadPoolWorkerScope scope(identity.get());
                         worker(token, queue);
                     });
             }
@@ -171,7 +171,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
             _queue->shutdown();
             auto workers = std::move(_workers);
             lock.unlock();
-            stopWorkers(workers, detail::thread_pool_worker_scope::belongsTo(_identity.get()));
+            stopWorkers(workers, detail::ThreadPoolWorkerScope::belongsTo(_identity.get()));
             throw;
         }
         return owner;
@@ -179,7 +179,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
 
     void stop()
     {
-        const bool workerCaller = detail::thread_pool_worker_scope::belongsTo(_identity.get());
+        const bool workerCaller = detail::ThreadPoolWorkerScope::belongsTo(_identity.get());
         std::vector<std::jthread> workers;
         {
             std::unique_lock lock(_worker_lock);
@@ -215,7 +215,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
     }
 
     std::shared_ptr<const int> _identity = std::make_shared<const int>(0);
-    std::shared_ptr<detail::thread_pool_queue> _queue = std::make_shared<detail::thread_pool_queue>();
+    std::shared_ptr<detail::ThreadPoolQueue> _queue = std::make_shared<detail::ThreadPoolQueue>();
     std::vector<std::jthread> _workers;
     std::recursive_mutex _worker_lock;
     bool _hasStarted = false;

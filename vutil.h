@@ -360,7 +360,7 @@ template <typename T> static void deallocate(T* t, size_t size)
 // The caller must destroy nontrivial elements before returning their storage with deallocate.
 template <typename T> typename T::value_type* as_array(const T& vec)
 {
-    if (vec.empty())
+    if (vec.size() == 0)
     {
         return nullptr;
     }

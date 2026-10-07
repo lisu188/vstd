@@ -112,16 +112,16 @@ template <class T, class R = void> struct enable_if_type
 
 namespace detail
 {
-template <class T> struct is_shared_pointer : std::false_type
+template <class T> struct IsSharedPointer : std::false_type
 {
 };
 
-template <class T> struct is_shared_pointer<std::shared_ptr<T>> : std::true_type
+template <class T> struct IsSharedPointer<std::shared_ptr<T>> : std::true_type
 {
 };
 } // namespace detail
 
-template <class T, class Enable = void> struct is_shared_ptr : detail::is_shared_pointer<std::remove_cvref_t<T>>
+template <class T, class Enable = void> struct is_shared_ptr : detail::IsSharedPointer<std::remove_cvref_t<T>>
 {
 };
 

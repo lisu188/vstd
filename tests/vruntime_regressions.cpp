@@ -146,6 +146,75 @@ void conditionalPredicatesRetainTheirStateBetweenPasses()
     assert(called);
 }
 
+void conditionalPredicatesRecoverAfterExceptionHandlerCopyFails()
+{
+    struct ThrowingCopyHandler
+    {
+        bool* throwOnCopy;
+        int* copies;
+        int* calls;
+
+        ThrowingCopyHandler(bool& throwOnCopy, int& copies, int& calls)
+            : throwOnCopy(&throwOnCopy), copies(&copies), calls(&calls)
+        {
+        }
+        ThrowingCopyHandler(const ThrowingCopyHandler& other)
+            : throwOnCopy(other.throwOnCopy), copies(other.copies), calls(other.calls)
+        {
+            ++*copies;
+            if (*throwOnCopy)
+            {
+                throw std::runtime_error("exception handler copy failure");
+            }
+        }
+        ThrowingCopyHandler(ThrowingCopyHandler&&) = default;
+        void operator()(std::exception_ptr) const
+        {
+            ++*calls;
+        }
+    };
+
+    auto loop = std::make_shared<loop_type>();
+    bool throwOnCopy = false;
+    int handlerCopies = 0;
+    int handlerCalls = 0;
+    loop->setExceptionHandler(ThrowingCopyHandler(throwOnCopy, handlerCopies, handlerCalls));
+    handlerCopies = 0;
+    throwOnCopy = true;
+    int predicateCalls = 0;
+    int actions = 0;
+    loop->invoke_when(
+        [&]()
+        {
+            if (++predicateCalls == 1)
+            {
+                throw std::runtime_error("predicate failure");
+            }
+            return true;
+        },
+        [&]() { ++actions; });
+    bool escaped = false;
+    try
+    {
+        loop->runReady();
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    assert(predicateCalls == 1 && actions == 0);
+    assert(loop->getConditionalTaskCount() == 1);
+    throwOnCopy = false;
+    assert(loop->runReady() == 1);
+    assert(predicateCalls == 2 && actions == 1);
+    assert(loop->getConditionalTaskCount() == 0);
+    assert(!escaped && handlerCopies == 1 && handlerCalls == 0);
+
+    loop->invoke([]() { throw std::runtime_error("task failure"); });
+    assert(loop->runPostedTasks() == 1);
+    assert(handlerCopies == 2 && handlerCalls == 1);
+}
+
 void rescheduledDeferredTasksStayWithinBatchBudget()
 {
     auto loop = std::make_shared<loop_type>();
@@ -272,13 +341,13 @@ void repostedTasksStayWithinBatchBudget()
 
 void dispatchDoesNotCopyRegisteredCallables()
 {
-    struct counted_callback
+    struct CountedCallback
     {
         int* copies;
         int* calls;
 
-        counted_callback(int& copies, int& calls) : copies(&copies), calls(&calls) {}
-        counted_callback(const counted_callback& other) : copies(other.copies), calls(other.calls)
+        CountedCallback(int& copies, int& calls) : copies(&copies), calls(&calls) {}
+        CountedCallback(const CountedCallback& other) : copies(other.copies), calls(other.calls)
         {
             ++*copies;
         }
@@ -292,7 +361,7 @@ void dispatchDoesNotCopyRegisteredCallables()
     loop->setFps(1000000);
     int copies = 0;
     int calls = 0;
-    auto connection = loop->connectFrameCallback(counted_callback(copies, calls));
+    auto connection = loop->connectFrameCallback(CountedCallback(copies, calls));
     copies = 0;
     for (int frame = 0; frame < 32; ++frame)
     {
@@ -339,6 +408,10 @@ int main(int argc, char** argv)
     if (selected == "all" || selected == "stateful-predicate")
     {
         conditionalPredicatesRetainTheirStateBetweenPasses();
+    }
+    if (selected == "all" || selected == "condition-exception")
+    {
+        conditionalPredicatesRecoverAfterExceptionHandlerCopyFails();
     }
     if (selected == "all")
     {

@@ -88,6 +88,19 @@ struct ExplicitCopyCallback
     }
 };
 
+struct ConstValue
+{
+    int value = 37;
+};
+
+struct ConstValueCallback
+{
+    const ConstValue operator()() &
+    {
+        return {};
+    }
+};
+
 struct Counter
 {
     int calls = 0;
@@ -147,6 +160,9 @@ static_assert(
 static_assert(!SupportsCall<NoncopyableReferenceCallback>);
 static_assert(SupportsCall<std::reference_wrapper<NoncopyableReferenceCallback>>);
 static_assert(std::is_same_v<decltype(vstd::functional::call(ExplicitCopyCallback{})), ExplicitCopy>);
+static_assert(std::is_same_v<decltype(vstd::functional::call(ConstValueCallback{})), const ConstValue>);
+static_assert(
+    std::is_same_v<decltype(vstd::functional::call(std::ref(std::declval<ConstValueCallback&>()))), const ConstValue>);
 static_assert(std::is_same_v<decltype(vstd::functional::call(wrapperIdentity, std::ref(std::declval<int&>()))),
                              std::reference_wrapper<int>>);
 static_assert(std::is_void_v<decltype(vstd::functional::call([]() {}))>);
@@ -259,6 +275,11 @@ void checkReferenceResultLifetime()
 
     auto explicit_result = vstd::functional::call(ExplicitCopyCallback{});
     require(explicit_result.value == 29, "materialized reference results support explicit copy constructors");
+
+    ConstValueCallback const_callback;
+    require(vstd::functional::call(const_callback).value == 37, "const value results retain their value");
+    require(vstd::functional::call(std::ref(const_callback)).value == 37,
+            "borrowed const value results retain their value");
 }
 
 void checkFunctionTraitCompatibility()

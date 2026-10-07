@@ -58,6 +58,23 @@ template <typename T> auto expand(T& t) -> decltype(dispatchee(t, is_prebinder<T
 
 template <typename T> using expand_type = decltype(expand(std::declval<T&>()));
 
+namespace detail
+{
+template <bool Invocable, bool HasTemporary, typename F, typename... Args> struct InvocationResult
+{
+    static constexpr bool materializes = false;
+    static constexpr bool can_return = false;
+};
+
+template <bool HasTemporary, typename F, typename... Args> struct InvocationResult<true, HasTemporary, F, Args...>
+{
+    using invocation_type = std::invoke_result_t<F, Args...>;
+    static constexpr bool materializes = std::is_reference_v<invocation_type> && HasTemporary;
+    using type = std::conditional_t<materializes, std::remove_cvref_t<invocation_type>, invocation_type>;
+    static constexpr bool can_return = !materializes || std::is_constructible_v<type, invocation_type>;
+};
+} // namespace detail
+
 template <typename f, typename... ltypes> struct prebinder : public pb_tag
 {
     std::tuple<f, ltypes...> closure;
@@ -69,17 +86,16 @@ template <typename f, typename... ltypes> struct prebinder : public pb_tag
     using invocation_result = std::invoke_result_t<f&, expand_type<ltypes>..., rtypes&&...>;
 
     template <typename... rtypes>
-    static constexpr bool materializes_result =
-        std::is_reference_v<invocation_result<rtypes...>> && (!std::is_reference_v<expand_type<ltypes>> || ...);
+    using result_traits = detail::InvocationResult<std::is_invocable_v<f&, expand_type<ltypes>..., rtypes&&...>,
+                                                   (!std::is_reference_v<expand_type<ltypes>> || ...), f&,
+                                                   expand_type<ltypes>..., rtypes&&...>;
 
-    template <typename... rtypes>
-    using result_type =
-        std::conditional_t<materializes_result<rtypes...>, std::remove_cvref_t<invocation_result<rtypes...>>,
-                           invocation_result<rtypes...>>;
+    template <typename... rtypes> static constexpr bool materializes_result = result_traits<rtypes...>::materializes;
+
+    template <typename... rtypes> using result_type = typename result_traits<rtypes...>::type;
 
     template <int... S, typename... rtypes>
-        requires(!materializes_result<rtypes...> ||
-                 std::is_constructible_v<result_type<rtypes...>, invocation_result<rtypes...>>)
+        requires(result_traits<rtypes...>::can_return)
     result_type<rtypes...> apply(seq<0, S...>, rtypes&&... rargs)
     {
         if constexpr (materializes_result<rtypes...>)
@@ -94,8 +110,7 @@ template <typename f, typename... ltypes> struct prebinder : public pb_tag
     }
 
     template <typename... rtypes>
-        requires(!materializes_result<rtypes...> ||
-                 std::is_constructible_v<result_type<rtypes...>, invocation_result<rtypes...>>)
+        requires(result_traits<rtypes...>::can_return)
     result_type<rtypes...> operator()(rtypes&&... rargs)
     {
         return apply(sequence(), std::forward<rtypes>(rargs)...);

@@ -3,6 +3,7 @@
 #include "vutil.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <iostream>
 #include <memory>
 #include <set>
@@ -91,6 +92,12 @@ void checkArrayLifetime()
     require(copied_strings[0] == strings[0] && copied_strings[1] == strings[1], "nontrivial string array");
     std::destroy_n(copied_strings, strings.size());
     vstd::deallocate(copied_strings, strings.size());
+
+    std::initializer_list<int> initializer_values{4, 8, 12};
+    auto* copied_values = vstd::as_array(initializer_values);
+    require(copied_values[0] == 4 && copied_values[2] == 12, "initializer lists retain array support");
+    vstd::deallocate(copied_values, initializer_values.size());
+    require(vstd::as_array(std::initializer_list<int>{}) == nullptr, "empty initializer list does not allocate");
 }
 
 void checkBuilders()

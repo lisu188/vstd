@@ -28,7 +28,7 @@ namespace
 {
 using namespace std::chrono_literals;
 
-struct custom_worker
+struct CustomWorker
 {
     template <typename Queue> void operator()(std::stop_token token, std::shared_ptr<Queue> queue)
     {
@@ -153,12 +153,12 @@ void poolCanBeDestroyedByItsLastTaskOwner()
 
 void completedTaskReleasesCapturedOwners()
 {
-    struct task_owner
+    struct TaskOwner
     {
         std::shared_ptr<vstd::thread_pool<1>> pool;
         std::promise<void> released;
 
-        ~task_owner()
+        ~TaskOwner()
         {
             pool.reset();
             released.set_value();
@@ -167,7 +167,7 @@ void completedTaskReleasesCapturedOwners()
 
     auto pool = std::make_shared<vstd::thread_pool<1>>()->start();
     std::weak_ptr<vstd::thread_pool<1>> weak = pool;
-    auto owner = std::make_shared<task_owner>();
+    auto owner = std::make_shared<TaskOwner>();
     owner->pool = pool;
     auto released = owner->released.get_future();
     std::promise<void> start;
@@ -226,7 +226,7 @@ void queuedTasksDrainAndRestart()
 
 void genericCustomWorkerRemainsSupported()
 {
-    auto pool = std::make_shared<vstd::thread_pool<1, custom_worker>>()->start();
+    auto pool = std::make_shared<vstd::thread_pool<1, CustomWorker>>()->start();
     std::promise<void> completed;
     auto result = completed.get_future();
     pool->execute(

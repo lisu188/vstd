@@ -80,23 +80,23 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     };
 
-    struct posted_task
+    struct PostedTask
     {
         std::size_t id;
         std::function<void()> function;
     };
 
-    template <typename Function> struct registered_callback
+    template <typename Function> struct RegisteredCallback
     {
         std::size_t id;
         Function function;
         std::atomic_bool cancelled{false};
 
-        registered_callback(std::size_t id, Function function) : id(id), function(std::move(function)) {}
+        RegisteredCallback(std::size_t id, Function function) : id(id), function(std::move(function)) {}
     };
 
-    using frame_callback = registered_callback<std::function<void(int)>>;
-    using event_callback = registered_callback<std::function<bool(SDL_Event*)>>;
+    using frame_callback = RegisteredCallback<std::function<void(int)>>;
+    using event_callback = RegisteredCallback<std::function<bool(SDL_Event*)>>;
 
   public:
     class connection
@@ -585,6 +585,15 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             {
                 continue;
             }
+            struct EvaluationGuard
+            {
+                std::atomic_bool& evaluating;
+
+                ~EvaluationGuard()
+                {
+                    evaluating.store(false, std::memory_order_release);
+                }
+            } resetEvaluation{conditionTask->evaluating};
 
             bool ready = false;
             safeInvoke([&]() { ready = conditionTask->predicate(); });
@@ -598,7 +607,6 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             {
                 removeCondition(conditionTask->id);
             }
-            conditionTask->evaluating.store(false, std::memory_order_release);
         }
         return processed;
     }
@@ -646,22 +654,22 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void reportException(std::exception_ptr error)
+    void reportException(std::exception_ptr error) noexcept
     {
-        std::function<void(std::exception_ptr)> handler;
+        try
         {
-            std::lock_guard lock(exceptionMutex);
-            handler = exceptionHandler;
-        }
-        if (handler)
-        {
-            try
+            std::function<void(std::exception_ptr)> handler;
+            {
+                std::lock_guard lock(exceptionMutex);
+                handler = exceptionHandler;
+            }
+            if (handler)
             {
                 handler(error);
             }
-            catch (...)
-            {
-            }
+        }
+        catch (...)
+        {
         }
     }
 
@@ -701,7 +709,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     std::atomic_size_t nextId{1};
 
     mutable std::mutex taskMutex;
-    std::queue<posted_task> taskQueue;
+    std::queue<PostedTask> taskQueue;
     std::size_t nextPostedTaskId = 0;
 
     mutable std::mutex delayMutex;

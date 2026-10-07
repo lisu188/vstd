@@ -86,8 +86,10 @@ template <bool Invocable, typename F, typename... Args> struct CallResultType
 
 template <typename F, typename... Args> struct CallResultType<true, F, Args...>
 {
-    using type = std::conditional_t<borrowsReferenceResult<F, Args...>(), std::invoke_result_t<F&, Args&...>,
-                                    std::remove_cvref_t<std::invoke_result_t<F&, Args&...>>>;
+    using type =
+        std::conditional_t<!std::is_reference_v<std::invoke_result_t<F&, Args&...>> ||
+                               borrowsReferenceResult<F, Args...>(),
+                           std::invoke_result_t<F&, Args&...>, std::remove_cvref_t<std::invoke_result_t<F&, Args&...>>>;
 };
 
 template <typename F, typename... Args>
