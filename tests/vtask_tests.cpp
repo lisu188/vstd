@@ -151,9 +151,16 @@ vstd::task<void> failAtOnce()
 
 vstd::task<void> selfJoin(vstd::task_group& group, bool& rejected)
 {
+    assert(group.ownsCurrentTask() && !group.finished());
     rejected = !group.join();
     group.requestStop();
     co_return;
+}
+
+vstd::task<void> waitExecution(vstd::task_handle<int> child, bool& resumed)
+{
+    co_await child.waitFinished();
+    resumed = true;
 }
 
 struct destruction_guard
@@ -241,6 +248,13 @@ void testRejectionAndDroppedTickets()
     queue->discard();
     expectThrow<vstd::scheduler_rejected>([&] { discarded_work.get(); });
     assert(discarded_work.finished() && calls == 0);
+
+    auto child = group.spawn(queuedValue(queue, 31, calls));
+    auto execution =
+        group.spawn(waitExecution(child, resumed), vstd::scheduler([](vstd::scheduler::function) { return false; }));
+    queue->run();
+    expectThrow<vstd::scheduler_rejected>([&] { execution.get(); });
+    assert(execution.finished() && !resumed);
 }
 
 void testQueuedCancellationAndMoveOnlyWork()
@@ -302,7 +316,7 @@ void testFrameRetentionAndGroupStop()
     vstd::task_group self;
     bool rejected = false;
     auto handle = self.spawn(selfJoin(self, rejected));
-    assert(rejected && handle.finished());
+    assert(rejected && handle.finished() && self.finished() && !self.ownsCurrentTask());
     expectThrow<vstd::task_cancelled>([&] { handle.get(); });
 }
 
@@ -370,6 +384,28 @@ void testNestedCancellationAndWorkerAffinity()
     auto rejected = group.spawn(workerAffinity(pool, std::this_thread::get_id()));
     expectThrow<vstd::scheduler_rejected>([&] { rejected.get(); });
     assert(rejected.finished());
+}
+
+void testWhenAllDrainsAfterSchedulerRejection()
+{
+    auto queue = std::make_shared<manual_queue>();
+    auto pool = std::make_shared<vstd::thread_pool<1>>()->start();
+    vstd::task_group group;
+    std::promise<void> started, release;
+    std::atomic<bool> completed{false};
+    auto first = group.spawn(retained(queue, {}));
+    auto second = group.spawn(boundedWork(pool, started, release.get_future().share(), completed));
+    started.get_future().wait();
+    auto joined = group.spawn(vstd::whenAll<void>({first, second}),
+                              vstd::scheduler([](vstd::scheduler::function) { return false; }));
+    queue->run();
+    assert(second.ready() && !second.finished());
+    assert(!joined.ready() && !joined.finished());
+    release.set_value();
+    assert(joined.join() && completed.load());
+    expectThrow<vstd::scheduler_rejected>([&] { joined.get(); });
+    assert(group.finished());
+    pool->stop();
 }
 
 void testCompletionCancellationRaces()
@@ -461,7 +497,26 @@ void testEventLoopPhasesAndCleanup()
     loop->runReady();
     assert(!delay.ready());
     delay.requestStop();
-    assert(delay.finished());
+    assert(delay.finished() && loop->getDelayedTaskCount() == 0);
+
+    for (int iteration = 0; iteration < 128; ++iteration)
+    {
+        auto cancelled_delay = group.spawn(waitLongDelay(loop));
+        assert(loop->getDelayedTaskCount() == 1);
+        cancelled_delay.requestStop();
+        assert(cancelled_delay.finished() && loop->getDelayedTaskCount() == 0);
+    }
+
+    {
+        vstd::event_loop<> stack_loop;
+        auto owner = std::make_shared<int>(42);
+        std::weak_ptr<int> retained_owner = owner;
+        auto timer = stack_loop.scheduleAfter(1000000000, [owner] {});
+        owner.reset();
+        assert(!retained_owner.expired());
+        timer.reset();
+        assert(retained_owner.expired() && stack_loop.getDelayedTaskCount() == 0);
+    }
 
     auto failure = group.spawn(waitConditionFailure(loop));
     loop->runReady();
@@ -502,6 +557,7 @@ int main()
     testFrameRetentionAndGroupStop();
     testOrderedWhenAllAndFailureJoin();
     testNestedCancellationAndWorkerAffinity();
+    testWhenAllDrainsAfterSchedulerRejection();
     testCompletionCancellationRaces();
 #ifdef VSTD_TEST_EVENT_LOOP
     testEventLoopPhasesAndCleanup();

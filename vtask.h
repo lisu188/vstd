@@ -448,6 +448,15 @@ class operation : public std::enable_shared_from_this<operation>
         }
     }
 
+    void checkFailure() const
+    {
+        std::lock_guard lock(mutex);
+        if (failure)
+        {
+            std::rethrow_exception(failure);
+        }
+    }
+
     std::stop_token token;
 
   private:
@@ -663,7 +672,13 @@ template <typename T = void> class task_handle
                 },
                 true);
         }
-        void await_resume() const noexcept {}
+        void await_resume() const
+        {
+            if (this->pending)
+            {
+                this->pending->checkFailure();
+            }
+        }
 
       private:
         std::shared_ptr<task_detail::state<T>> target;
@@ -854,6 +869,18 @@ class task_group
             task->join();
         }
         return true;
+    }
+
+    bool finished() const
+    {
+        std::lock_guard lock(mutex);
+        return std::ranges::all_of(tasks, [](const auto& task) { return task->finished(); });
+    }
+
+    bool ownsCurrentTask() const
+    {
+        std::lock_guard lock(mutex);
+        return std::ranges::any_of(tasks, [](const auto& task) { return task.get() == task_detail::currentTask; });
     }
 
   private:
@@ -1154,7 +1181,14 @@ task<std::conditional_t<std::is_void_v<T>, void, std::vector<T>>> whenAll(std::v
                                             [joined] { joined->fail(std::make_exception_ptr(task_cancelled())); });
     for (const auto& handle : handles)
     {
-        co_await handle.waitFinished();
+        try
+        {
+            co_await handle.waitFinished();
+        }
+        catch (...)
+        {
+            joined->fail(std::current_exception());
+        }
     }
     {
         std::lock_guard lock(joined->mutex);

@@ -34,6 +34,7 @@
 #include <exception>
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -56,12 +57,10 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         std::shared_ptr<std::atomic_bool> cancelled;
     };
 
-    struct delay_compare
+    struct delayed_state
     {
-        bool operator()(const delayed_task& a, const delayed_task& b) const
-        {
-            return a.due != b.due ? a.due > b.due : a.id > b.id;
-        }
+        std::mutex mutex;
+        std::map<std::pair<clock::time_point, std::size_t>, delayed_task> queue;
     };
 
     struct conditional_task
@@ -238,12 +237,27 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         auto cancelled = std::make_shared<std::atomic_bool>(false);
         const auto due = clock::now() + std::chrono::milliseconds(std::max(milliseconds, 0));
         {
-            std::lock_guard lock(delayMutex);
-            delayQueue.push(
-                {due, id, std::make_shared<std::move_only_function<void()>>(std::move(function)), cancelled});
+            std::lock_guard lock(delays->mutex);
+            delays->queue.emplace(std::make_pair(due, id),
+                                  delayed_task{due, id,
+                                               std::make_shared<std::move_only_function<void()>>(std::move(function)),
+                                               cancelled});
         }
         wake();
-        return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
+        std::weak_ptr<delayed_state> weak_delays = delays;
+        return connection(
+            [cancelled, weak_delays, due, id]()
+            {
+                cancelled->store(true, std::memory_order_relaxed);
+                if (auto state = weak_delays.lock())
+                {
+                    typename decltype(state->queue)::node_type retired;
+                    {
+                        std::lock_guard lock(state->mutex);
+                        retired = state->queue.extract({due, id});
+                    }
+                }
+            });
     }
 
     connection connectFrameCallback(const std::function<void(int)>& function)
@@ -382,8 +396,8 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             }
         }
         {
-            std::lock_guard lock(delayMutex);
-            if (!delayQueue.empty() && delayQueue.top().due <= clock::now())
+            std::lock_guard lock(delays->mutex);
+            if (!delays->queue.empty() && delays->queue.begin()->second.due <= clock::now())
             {
                 return true;
             }
@@ -405,8 +419,8 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     std::size_t getDelayedTaskCount() const
     {
-        std::lock_guard lock(delayMutex);
-        return delayQueue.size();
+        std::lock_guard lock(delays->mutex);
+        return delays->queue.size();
     }
 
     std::size_t getFrameCallbackCount() const
@@ -619,7 +633,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         const auto now = clock::now();
         std::size_t limitId;
         {
-            std::lock_guard lock(delayMutex);
+            std::lock_guard lock(delays->mutex);
             limitId = nextId.load(std::memory_order_relaxed);
         }
 
@@ -628,13 +642,14 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         {
             delayed_task delayed;
             {
-                std::lock_guard lock(delayMutex);
-                if (delayQueue.empty() || delayQueue.top().due > now || delayQueue.top().id >= limitId)
+                std::lock_guard lock(delays->mutex);
+                if (delays->queue.empty() || delays->queue.begin()->second.due > now ||
+                    delays->queue.begin()->second.id >= limitId)
                 {
                     break;
                 }
-                delayed = delayQueue.top();
-                delayQueue.pop();
+                delayed = std::move(delays->queue.begin()->second);
+                delays->queue.erase(delays->queue.begin());
             }
             if (!delayed.cancelled->load(std::memory_order_relaxed))
             {
@@ -715,8 +730,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     std::queue<PostedTask> taskQueue;
     std::size_t nextPostedTaskId = 0;
 
-    mutable std::mutex delayMutex;
-    std::priority_queue<delayed_task, std::vector<delayed_task>, delay_compare> delayQueue;
+    std::shared_ptr<delayed_state> delays = std::make_shared<delayed_state>();
 
     mutable std::mutex conditionalMutex;
     std::list<std::shared_ptr<conditional_task>> conditionalQueue;

@@ -65,10 +65,10 @@ jobs:
         with:
           path: C:\vcpkg\installed
           key: vstd-cxx26-windows-2022-clang-cl-20.1.8-x64-windows-${{ hashFiles('.github/workflows/vmeta.yml') }}
-      - name: Install Boost filesystem
+      - name: Install Boost modules used by public headers
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-filesystem:x64-windows
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-filesystem:x64-windows boost-pool:x64-windows boost-range:x64-windows boost-algorithm:x64-windows
           if ($LASTEXITCODE -ne 0) { throw 'Boost installation failed' }
       - name: Check setup preserves sources
         shell: pwsh
