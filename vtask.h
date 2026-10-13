@@ -89,6 +89,51 @@ namespace task_detail
 class state_base;
 inline thread_local state_base* currentTask = nullptr;
 
+class execution_scope;
+inline thread_local execution_scope* currentExecution = nullptr;
+
+class execution_scope
+{
+  public:
+    explicit execution_scope(state_base* task)
+        : task(task), previous(currentExecution), previousTask(std::exchange(currentTask, task))
+    {
+        currentExecution = this;
+    }
+    explicit execution_scope(std::shared_ptr<state_base> owner) : execution_scope(owner.get())
+    {
+        retained = std::move(owner);
+    }
+    execution_scope(const execution_scope&) = delete;
+    ~execution_scope()
+    {
+        release();
+    }
+    void release()
+    {
+        if (std::exchange(active, false))
+        {
+            currentTask = previousTask;
+            currentExecution = previous;
+        }
+    }
+    state_base* getTask() const
+    {
+        return task;
+    }
+    execution_scope* getPrevious() const
+    {
+        return previous;
+    }
+
+  private:
+    std::shared_ptr<state_base> retained;
+    state_base* task;
+    execution_scope* previous;
+    state_base* previousTask;
+    bool active = true;
+};
+
 class state_base : public std::enable_shared_from_this<state_base>
 {
   public:
@@ -118,7 +163,7 @@ class state_base : public std::enable_shared_from_this<state_base>
         }
         for (;;)
         {
-            auto previous = std::exchange(currentTask, this);
+            execution_scope execution(this);
             const bool skip_body = !std::exchange(started, true) && stopping();
             if (!skip_body)
             {
@@ -130,7 +175,7 @@ class state_base : public std::enable_shared_from_this<state_base>
                 auto completed_frame = std::exchange(frame, {});
                 lock.unlock();
                 completed_frame.destroy();
-                currentTask = previous;
+                execution.release();
                 lock.lock();
                 running = false;
                 executionFinished = true;
@@ -138,7 +183,7 @@ class state_base : public std::enable_shared_from_this<state_base>
                 completeExecution();
                 return;
             }
-            currentTask = previous;
+            execution.release();
             if (!std::exchange(resumePending, false))
             {
                 running = false;
@@ -199,16 +244,19 @@ class state_base : public std::enable_shared_from_this<state_base>
 
     bool ownsCurrentExecution() const
     {
-        auto current = currentTask;
-        std::shared_ptr<state_base> owner;
-        while (current)
+        for (auto execution = currentExecution; execution; execution = execution->getPrevious())
         {
-            if (current == this)
+            auto current = execution->getTask();
+            std::shared_ptr<state_base> owner;
+            while (current)
             {
-                return true;
+                if (current == this)
+                {
+                    return true;
+                }
+                owner = current->parentTask.lock();
+                current = owner.get();
             }
-            owner = current->parentTask.lock();
-            current = owner.get();
         }
         return false;
     }
@@ -380,24 +428,6 @@ template <> class state<void> final : public state_base
 };
 
 class operation;
-
-class execution_scope
-{
-  public:
-    explicit execution_scope(std::shared_ptr<state_base> owner)
-        : owner(std::move(owner)), previous(std::exchange(currentTask, this->owner.get()))
-    {
-    }
-    execution_scope(const execution_scope&) = delete;
-    ~execution_scope()
-    {
-        currentTask = previous;
-    }
-
-  private:
-    std::shared_ptr<state_base> owner;
-    state_base* previous;
-};
 
 class resume_ticket
 {

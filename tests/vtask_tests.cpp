@@ -203,6 +203,74 @@ void testOwnedWorkerSelfJoinAndScopeCleanup()
     pool->stop();
 }
 
+vstd::task<void> synchronousChild(vstd::task_group& outer, vstd::task_group& inner, bool& observed)
+{
+    assert(outer.ownsCurrentTask() && inner.ownsCurrentTask());
+    assert(!outer.join() && !inner.join());
+    observed = true;
+    co_return;
+}
+
+void spawnSynchronousChild(vstd::task_group& outer, bool& observed)
+{
+    vstd::task_group inner;
+    auto child = inner.spawn(synchronousChild(outer, inner, observed));
+    child.get();
+    assert(child.finished() && inner.join() && !inner.ownsCurrentTask() && outer.ownsCurrentTask());
+}
+
+vstd::task<void> synchronousParent(vstd::task_group& outer, bool& observed)
+{
+    spawnSynchronousChild(outer, observed);
+    co_return;
+}
+
+vstd::task<void> synchronousWorkerParent(std::shared_ptr<vstd::thread_pool<1>> pool, vstd::task_group& outer,
+                                         bool& observed)
+{
+    co_await vstd::work(pool, [&] { spawnSynchronousChild(outer, observed); });
+}
+
+vstd::task<void> independentChild(std::shared_ptr<manual_queue> queue, vstd::task_group& outer, bool& owned)
+{
+    co_await vstd::post(queue);
+    owned = outer.ownsCurrentTask();
+}
+
+vstd::task<void> startIndependentChild(std::shared_ptr<manual_queue> queue, vstd::task_group& outer,
+                                       vstd::task_group& independent, vstd::task_handle<void>& child, bool& owned)
+{
+    child = independent.spawn(independentChild(queue, outer, owned));
+    co_return;
+}
+
+void testSynchronousExecutionAncestryKeepsGroupsIndependent()
+{
+    auto pool = std::make_shared<vstd::thread_pool<1>>()->start();
+    for (const bool worker : {false, true})
+    {
+        vstd::task_group outer;
+        bool observed = false;
+        auto parent =
+            outer.spawn(worker ? synchronousWorkerParent(pool, outer, observed) : synchronousParent(outer, observed));
+        assert(parent.join() && observed && outer.finished());
+        parent.get();
+    }
+    pool->stop();
+
+    auto queue = std::make_shared<manual_queue>();
+    vstd::task_group outer, independent;
+    vstd::task_handle<void> child;
+    bool owned = true;
+    auto parent = outer.spawn(startIndependentChild(queue, outer, independent, child, owned));
+    assert(parent.finished() && !child.ready());
+    outer.requestStop();
+    assert(!child.ready());
+    queue->run();
+    child.get();
+    assert(child.finished() && !owned);
+}
+
 vstd::task<void> waitExecution(vstd::task_handle<int> child, bool& resumed)
 {
     co_await child.waitFinished();
@@ -690,6 +758,7 @@ int main()
     testQueuedCancellationAndMoveOnlyWork();
     testFrameRetentionAndGroupStop();
     testOwnedWorkerSelfJoinAndScopeCleanup();
+    testSynchronousExecutionAncestryKeepsGroupsIndependent();
     testOrderedWhenAllAndFailureJoin();
     testNestedCancellationAndWorkerAffinity();
     testWhenAllDrainsAfterSchedulerRejection();
