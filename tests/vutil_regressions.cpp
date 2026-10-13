@@ -117,6 +117,13 @@ std::string pointerStream(const void* pointer)
 
 void pointerTarget() {}
 
+std::string functionPointerStream(void (*pointer)())
+{
+    std::ostringstream stream;
+    stream << std::hex << pointer;
+    return boost::to_upper_copy(stream.str());
+}
+
 void checkPointerHex()
 {
     int value = 42;
@@ -144,9 +151,9 @@ void checkPointerHex()
     require(vstd::to_hex(erased) == pointerStream(erased.get()), "shared void pointer formats an address");
     using Function = void();
     std::shared_ptr<Function> function(&pointerTarget, [](Function*) {});
-    require(vstd::to_hex(function) == vstd::to_hex<Function*>(function.get()),
+    require(vstd::to_hex(function) == functionPointerStream(function.get()),
             "shared function pointer retains legacy stream formatting");
-    require(vstd::to_hex(std::shared_ptr<Function>{}) == vstd::to_hex<Function*>(nullptr),
+    require(vstd::to_hex(std::shared_ptr<Function>{}) == functionPointerStream(nullptr),
             "empty shared function pointer retains legacy stream formatting");
 }
 
