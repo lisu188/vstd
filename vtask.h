@@ -381,6 +381,24 @@ template <> class state<void> final : public state_base
 
 class operation;
 
+class execution_scope
+{
+  public:
+    explicit execution_scope(std::shared_ptr<state_base> owner)
+        : owner(std::move(owner)), previous(std::exchange(currentTask, this->owner.get()))
+    {
+    }
+    execution_scope(const execution_scope&) = delete;
+    ~execution_scope()
+    {
+        currentTask = previous;
+    }
+
+  private:
+    std::shared_ptr<state_base> owner;
+    state_base* previous;
+};
+
 class resume_ticket
 {
   public:
@@ -450,6 +468,11 @@ class operation : public std::enable_shared_from_this<operation>
         }
         executing = true;
         return true;
+    }
+
+    execution_scope ownExecution() const
+    {
+        return execution_scope(owner.lock());
     }
 
     void endProbe()
@@ -1018,14 +1041,17 @@ template <typename Pool, typename Function> class work_awaiter : public task_det
                                                        }
                                                        try
                                                        {
-                                                           if constexpr (std::is_void_v<result_type>)
                                                            {
-                                                               function();
-                                                               result->emplace(true);
-                                                           }
-                                                           else
-                                                           {
-                                                               result->emplace(function());
+                                                               auto ownership = pending->ownExecution();
+                                                               if constexpr (std::is_void_v<result_type>)
+                                                               {
+                                                                   function();
+                                                                   result->emplace(true);
+                                                               }
+                                                               else
+                                                               {
+                                                                   result->emplace(function());
+                                                               }
                                                            }
                                                            pending->complete();
                                                        }
@@ -1112,7 +1138,11 @@ template <typename Loop, typename Predicate> class condition_awaiter : public ta
                     }
                     try
                     {
-                        const bool ready = (*predicate)();
+                        bool ready;
+                        {
+                            auto ownership = operation->ownExecution();
+                            ready = (*predicate)();
+                        }
                         operation->endProbe();
                         return ready;
                     }

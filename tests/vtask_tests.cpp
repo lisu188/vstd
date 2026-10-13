@@ -173,6 +173,36 @@ vstd::task<void> nestedSelfJoinRoot(std::shared_ptr<manual_queue> queue, vstd::t
     co_await nestedSelfJoin(queue, group, ancestor, rejected);
 }
 
+vstd::task<void> workerSelfJoin(std::shared_ptr<vstd::thread_pool<1>> pool, vstd::task_group& group, bool& rejected)
+{
+    co_await vstd::work(pool,
+                        [&]
+                        {
+                            assert(group.ownsCurrentTask() && !group.finished());
+                            rejected = !group.join();
+                            group.requestStop();
+                        });
+}
+
+void testOwnedWorkerSelfJoinAndScopeCleanup()
+{
+    auto pool = std::make_shared<vstd::thread_pool<1>>()->start();
+    vstd::task_group group;
+    bool rejected = false;
+    auto handle = group.spawn(workerSelfJoin(pool, group, rejected));
+    assert(handle.join() && rejected && group.finished());
+    expectThrow<vstd::task_cancelled>([&] { handle.get(); });
+    std::promise<void> unowned;
+    pool->execute(
+        [&]
+        {
+            assert(!group.ownsCurrentTask());
+            unowned.set_value();
+        });
+    unowned.get_future().wait();
+    pool->stop();
+}
+
 vstd::task<void> waitExecution(vstd::task_handle<int> child, bool& resumed)
 {
     co_await child.waitFinished();
@@ -484,6 +514,46 @@ vstd::task<void> waitConditionFailure(std::shared_ptr<vstd::event_loop<>> loop)
     co_await vstd::until(loop, []() -> bool { throw std::runtime_error("predicate failure"); });
 }
 
+vstd::task<void> conditionSelfJoin(std::shared_ptr<vstd::event_loop<>> loop, vstd::task_group& group, bool& rejected)
+{
+    co_await vstd::until(loop,
+                         [&]
+                         {
+                             assert(group.ownsCurrentTask() && !group.finished());
+                             rejected = !group.join();
+                             group.requestStop();
+                             return true;
+                         });
+}
+
+vstd::task<void> frameSelfJoin(std::shared_ptr<vstd::event_loop<>> loop, vstd::task_group& group, bool& rejected)
+{
+    co_await vstd::nextFrame(loop);
+    assert(group.ownsCurrentTask() && !group.finished());
+    rejected = !group.join();
+    group.requestStop();
+}
+
+void testOwnedConditionAndFrameSelfJoin()
+{
+    auto loop = std::make_shared<vstd::event_loop<>>();
+    for (const bool frame : {false, true})
+    {
+        vstd::task_group group;
+        bool rejected = false;
+        auto handle =
+            group.spawn(frame ? frameSelfJoin(loop, group, rejected) : conditionSelfJoin(loop, group, rejected),
+                        vstd::loopScheduler(loop));
+        for (int phase = 0; phase < 8 && !handle.finished(); ++phase)
+        {
+            loop->runFrame();
+        }
+        assert(rejected && handle.finished() && group.finished() && !group.ownsCurrentTask());
+        assert(loop->getConditionalTaskCount() == 0 && loop->getFrameCallbackCount() == 0);
+        expectThrow<vstd::task_cancelled>([&] { handle.get(); });
+    }
+}
+
 vstd::task<void> waitLongDelay(std::shared_ptr<vstd::event_loop<>> loop)
 {
     co_await vstd::sleepFor(loop, std::chrono::hours(24 * 365));
@@ -619,6 +689,7 @@ int main()
     testRejectionAndDroppedTickets();
     testQueuedCancellationAndMoveOnlyWork();
     testFrameRetentionAndGroupStop();
+    testOwnedWorkerSelfJoinAndScopeCleanup();
     testOrderedWhenAllAndFailureJoin();
     testNestedCancellationAndWorkerAffinity();
     testWhenAllDrainsAfterSchedulerRejection();
@@ -626,6 +697,7 @@ int main()
 #ifdef VSTD_TEST_EVENT_LOOP
     testEventLoopPhasesAndCleanup();
     testPredicateCancellationRetainsFrame();
+    testOwnedConditionAndFrameSelfJoin();
 #endif
     std::cout << "task regression checks passed\n";
 }
