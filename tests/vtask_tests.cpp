@@ -157,6 +157,22 @@ vstd::task<void> selfJoin(vstd::task_group& group, bool& rejected)
     co_return;
 }
 
+vstd::task<void> nestedSelfJoin(std::shared_ptr<manual_queue> queue, vstd::task_group& group,
+                                const vstd::task_handle<void>& ancestor, bool& rejected)
+{
+    co_await vstd::post(queue);
+    assert(group.ownsCurrentTask() && !group.finished());
+    assert(!ancestor.join());
+    expectThrow<std::logic_error>([&] { ancestor.get(); });
+    co_await selfJoin(group, rejected);
+}
+
+vstd::task<void> nestedSelfJoinRoot(std::shared_ptr<manual_queue> queue, vstd::task_group& group,
+                                    const vstd::task_handle<void>& ancestor, bool& rejected)
+{
+    co_await nestedSelfJoin(queue, group, ancestor, rejected);
+}
+
 vstd::task<void> waitExecution(vstd::task_handle<int> child, bool& resumed)
 {
     co_await child.waitFinished();
@@ -317,6 +333,18 @@ void testFrameRetentionAndGroupStop()
     bool rejected = false;
     auto handle = self.spawn(selfJoin(self, rejected));
     assert(rejected && handle.finished() && self.finished() && !self.ownsCurrentTask());
+
+    vstd::task_group nested_group;
+    vstd::task_handle<void> ancestor;
+    bool nested_rejected = false;
+    ancestor = nested_group.spawn(nestedSelfJoinRoot(queue, nested_group, ancestor, nested_rejected));
+    assert(queue->run() == 1);
+    for (int phase = 0; phase < 4 && !ancestor.finished(); ++phase)
+    {
+        queue->run();
+    }
+    assert(nested_rejected && ancestor.finished() && nested_group.finished() && !nested_group.ownsCurrentTask());
+    expectThrow<vstd::task_cancelled>([&] { ancestor.get(); });
     expectThrow<vstd::task_cancelled>([&] { handle.get(); });
 }
 
