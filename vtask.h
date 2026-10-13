@@ -188,13 +188,34 @@ class state_base : public std::enable_shared_from_this<state_base>
 
     bool join() const
     {
-        if (currentTask == this)
+        if (ownsCurrentExecution())
         {
             return false;
         }
         std::unique_lock lock(resultMutex);
         resultCondition.wait(lock, [this] { return completed; });
         return true;
+    }
+
+    bool ownsCurrentExecution() const
+    {
+        auto current = currentTask;
+        std::shared_ptr<state_base> owner;
+        while (current)
+        {
+            if (current == this)
+            {
+                return true;
+            }
+            owner = current->parentTask.lock();
+            current = owner.get();
+        }
+        return false;
+    }
+
+    void setParent(const std::shared_ptr<state_base>& parent)
+    {
+        parentTask = parent;
     }
 
     std::exception_ptr error() const
@@ -249,7 +270,7 @@ class state_base : public std::enable_shared_from_this<state_base>
   protected:
     void waitResult() const
     {
-        if (currentTask == this)
+        if (ownsCurrentExecution())
         {
             throw std::logic_error("task cannot synchronously wait for its own result");
         }
@@ -288,6 +309,8 @@ class state_base : public std::enable_shared_from_this<state_base>
     }
 
     std::exception_ptr resultError;
+    // Assigned before a nested task starts, and unchanged throughout its execution.
+    std::weak_ptr<state_base> parentTask;
     std::vector<scheduler::function> completionCallbacks;
     bool completed = false;
     std::stop_source stopSource;
@@ -766,6 +789,7 @@ template <typename T> class task
         template <typename Promise> void await_suspend(std::coroutine_handle<Promise> frame)
         {
             auto parent = frame.promise().getTaskState();
+            child->setParent(parent);
             child->setScheduler(parent->getScheduler());
             this->pending = std::make_shared<task_detail::operation>(parent, parent->getScheduler());
             std::weak_ptr<task_detail::operation> weak_operation = this->pending;
@@ -873,7 +897,7 @@ class task_group
         }
         for (const auto& task : snapshot)
         {
-            if (task.get() == task_detail::currentTask)
+            if (task->ownsCurrentExecution())
             {
                 return false;
             }
@@ -894,7 +918,7 @@ class task_group
     bool ownsCurrentTask() const
     {
         std::lock_guard lock(mutex);
-        return std::ranges::any_of(tasks, [](const auto& task) { return task.get() == task_detail::currentTask; });
+        return std::ranges::any_of(tasks, [](const auto& task) { return task->ownsCurrentExecution(); });
     }
 
   private:
