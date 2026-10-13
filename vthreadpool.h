@@ -32,6 +32,73 @@ namespace vstd
 {
 namespace detail
 {
+class ThreadPoolWorkerScope
+{
+  public:
+    explicit ThreadPoolWorkerScope(const void* identity) : previousIdentity(activeIdentity)
+    {
+        activeIdentity = identity;
+    }
+
+    ~ThreadPoolWorkerScope()
+    {
+        activeIdentity = previousIdentity;
+    }
+
+    static bool belongsTo(const void* identity)
+    {
+        return activeIdentity == identity;
+    }
+
+  private:
+    inline static thread_local const void* activeIdentity = nullptr;
+    const void* previousIdentity;
+};
+
+class ThreadPoolQueue
+{
+  public:
+    bool push_task(std::move_only_function<void()> task)
+    {
+        std::unique_lock lock(_lock);
+        if (_shutdown)
+        {
+            return false;
+        }
+        _queue.push(std::move(task));
+        _condition.notify_one();
+        return true;
+    }
+
+    bool pop_task(std::move_only_function<void()>& task, std::stop_token stop_token)
+    {
+        std::unique_lock lock(_lock);
+        std::stop_callback on_stop(stop_token, [this]() { _condition.notify_all(); });
+        _condition.wait(lock,
+                        [this, &stop_token]() { return !_queue.empty() || _shutdown || stop_token.stop_requested(); });
+        if (_queue.empty())
+        {
+            return false;
+        }
+        task = std::move(_queue.front());
+        _queue.pop();
+        return true;
+    }
+
+    void shutdown()
+    {
+        std::unique_lock lock(_lock);
+        _shutdown = true;
+        _condition.notify_all();
+    }
+
+  private:
+    std::queue<std::move_only_function<void()>> _queue;
+    std::mutex _lock;
+    std::condition_variable _condition;
+    bool _shutdown = false;
+};
+
 class worker_thread
 {
   public:
@@ -48,6 +115,7 @@ class worker_thread
             catch (...)
             {
             }
+            task = {};
         }
     }
 };
@@ -56,8 +124,6 @@ class worker_thread
 template <int _worker_count, typename worker_thread = detail::worker_thread>
 class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_count, worker_thread>>
 {
-    friend worker_thread;
-
   public:
     ~thread_pool()
     {
@@ -66,105 +132,104 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
 
     template <typename F, typename... Args> void execute(F&& f, Args&&... args)
     {
-        push_task(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+        std::shared_ptr<detail::ThreadPoolQueue> queue;
+        {
+            std::unique_lock lock(_worker_lock);
+            queue = _queue;
+        }
+        queue->push_task(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
     }
 
     bool submit(std::move_only_function<void()> task)
     {
-        return push_task(std::move(task));
+        std::shared_ptr<detail::ThreadPoolQueue> queue;
+        {
+            std::unique_lock lock(_worker_lock);
+            queue = _queue;
+        }
+        return queue->push_task(std::move(task));
     }
 
     std::shared_ptr<thread_pool> start()
     {
-        std::unique_lock<std::recursive_mutex> lock(_worker_lock);
+        auto owner = this->shared_from_this();
+        std::unique_lock lock(_worker_lock);
         if (_started)
         {
-            return this->shared_from_this();
+            return owner;
         }
-        reset_queue();
-        while (_workers.size() < _worker_count)
+        if (_hasStarted)
         {
-            add_worker();
+            _queue = std::make_shared<detail::ThreadPoolQueue>();
         }
+        _hasStarted = true;
         _started = true;
-        return this->shared_from_this();
+        try
+        {
+            while (_workers.size() < _worker_count)
+            {
+                _workers.emplace_back(
+                    [worker = worker_thread(), queue = _queue, identity = _identity](std::stop_token token) mutable
+                    {
+                        detail::ThreadPoolWorkerScope scope(identity.get());
+                        worker(token, queue);
+                    });
+            }
+        }
+        catch (...)
+        {
+            _started = false;
+            _queue->shutdown();
+            auto workers = std::move(_workers);
+            lock.unlock();
+            stopWorkers(workers, detail::ThreadPoolWorkerScope::belongsTo(_identity.get()));
+            throw;
+        }
+        return owner;
     }
 
     void stop()
     {
+        const bool workerCaller = detail::ThreadPoolWorkerScope::belongsTo(_identity.get());
         std::vector<std::jthread> workers;
         {
-            std::unique_lock<std::recursive_mutex> lock(_worker_lock);
+            std::unique_lock lock(_worker_lock);
             if (!_started)
             {
                 return;
             }
             _started = false;
-            shutdown_queue();
-            for (auto& worker : _workers)
-            {
-                worker.request_stop();
-            }
+            _queue->shutdown();
             workers = std::move(_workers);
         }
-        workers.clear();
+        stopWorkers(workers, workerCaller);
     }
 
   private:
-    void add_worker()
+    static void stopWorkers(std::vector<std::jthread>& workers, bool workerCaller)
     {
-        _workers.emplace_back(worker_thread(), this->shared_from_this());
-    }
-
-    bool push_task(std::move_only_function<void()> task)
-    {
-        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
-        if (_queue_shutdown)
+        for (auto& worker : workers)
         {
-            return false;
+            worker.request_stop();
         }
-        _queue.push(std::move(task));
-        _queue_condition.notify_one();
-        return true;
-    }
-
-    bool pop_task(std::move_only_function<void()>& task, std::stop_token stop_token)
-    {
-        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
-        std::stop_callback on_stop(stop_token, [this]() { _queue_condition.notify_all(); });
-
-        _queue_condition.wait(lock, [this, &stop_token]()
-                              { return !_queue.empty() || _queue_shutdown || stop_token.stop_requested(); });
-
-        if (_queue.empty())
+        for (auto& worker : workers)
         {
-            return false;
+            if (workerCaller)
+            {
+                worker.detach();
+            }
+            else if (worker.joinable())
+            {
+                worker.join();
+            }
         }
-
-        task = std::move(_queue.front());
-        _queue.pop();
-        return true;
     }
 
-    void shutdown_queue()
-    {
-        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
-        _queue_shutdown = true;
-        _queue_condition.notify_all();
-    }
-
-    void reset_queue()
-    {
-        std::unique_lock<std::recursive_mutex> lock(_queue_lock);
-        _queue_shutdown = false;
-    }
-
-    std::queue<std::move_only_function<void()>> _queue;
-    std::recursive_mutex _queue_lock;
-    std::condition_variable_any _queue_condition;
+    std::shared_ptr<const int> _identity = std::make_shared<const int>(0);
+    std::shared_ptr<detail::ThreadPoolQueue> _queue = std::make_shared<detail::ThreadPoolQueue>();
     std::vector<std::jthread> _workers;
     std::recursive_mutex _worker_lock;
-    bool _queue_shutdown = false;
+    bool _hasStarted = false;
     bool _started = false;
 };
 } // namespace vstd

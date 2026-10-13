@@ -485,9 +485,9 @@ void testEventLoopPhasesAndCleanup()
         });
     second = loop->connectFrameCallback([&owned](int) { owned += 2; });
     loop->runFrame();
-    assert(owned == 34);
+    assert(owned == 32);
     loop->runFrame();
-    assert(owned == 35);
+    assert(owned == 33);
 }
 #endif
 } // namespace

@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -21,9 +21,11 @@
 #include "vdefines.h"
 #include "vhash.h"
 #include <boost/algorithm/string.hpp>
+#include <cstdint>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 namespace vstd
 {
@@ -36,12 +38,19 @@ template <typename U> std::string to_hex(U object)
 
 template <typename U> std::string to_hex(U* object)
 {
-    return to_hex(static_cast<std::size_t>(object));
+    return to_hex(reinterpret_cast<std::uintptr_t>(object));
 }
 
 template <typename U> std::string to_hex(std::shared_ptr<U> object)
 {
-    return to_hex<U*>(object.get());
+    if constexpr (std::is_function_v<U>)
+    {
+        return to_hex<U*>(object.get());
+    }
+    else
+    {
+        return to_hex<const void*>(const_cast<const void*>(static_cast<const volatile void*>(object.get())));
+    }
 }
 
 template <typename... Args> std::string to_hex_hash(Args... args)

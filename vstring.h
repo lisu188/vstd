@@ -196,6 +196,10 @@ template <typename T = void> void add_line(std::string& org, const std::string& 
 
 template <typename T = void> std::string camel(std::string org)
 {
+    if (org.empty())
+    {
+        return org;
+    }
     if (org.contains(' '))
     {
         std::string ret;

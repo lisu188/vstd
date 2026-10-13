@@ -20,6 +20,7 @@
 
 #include "vtuple.h"
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -94,7 +95,7 @@ template <typename Range> struct range_traits
 
 template <typename T> struct clear_type
 {
-    typedef typename std::remove_reference<typename std::remove_cv<T>::type>::type type;
+    using type = std::remove_cvref_t<T>;
 };
 
 template <typename T, typename U>
@@ -107,11 +108,18 @@ template <class T, class R = void> struct enable_if_type
     typedef R type;
 };
 
-template <class T, class Enable = void> struct is_shared_ptr : std::false_type
+namespace detail
+{
+template <class T> struct IsSharedPointer : std::false_type
 {
 };
 
-template <class T> struct is_shared_ptr<T, typename enable_if_type<typename T::element_type>::type> : std::true_type
+template <class T> struct IsSharedPointer<std::shared_ptr<T>> : std::true_type
+{
+};
+} // namespace detail
+
+template <class T, class Enable = void> struct is_shared_ptr : detail::IsSharedPointer<std::remove_cvref_t<T>>
 {
 };
 

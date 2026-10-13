@@ -1,6 +1,6 @@
 /*
  * MIT License
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -59,7 +59,10 @@ template <typename T> std::size_t hash_combine(T t)
 }
 template <typename F, typename G, typename... T> std::size_t hash_combine(F f, G g, T... args)
 {
-    return power<31, sizeof...(args) + 1>::value * hash_combine(f) + hash_combine(g, args...);
+    std::size_t result = hash_combine(f);
+    result = result * 31 + hash_combine(g);
+    ((result = result * 31 + hash_combine(args)), ...);
+    return result;
 }
 } // namespace vstd
 namespace vstd
