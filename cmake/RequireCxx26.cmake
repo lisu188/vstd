@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Andrzej Lis
+# SPDX-License-Identifier: MIT
+if(NOT "cxx_std_26" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+    message(FATAL_ERROR "C++26 is required without fallback. Use GCC 15+ or clang-cl 20.1.8+ with CMake 4.0.2+.")
+endif()
+
 include(CheckCXXSourceCompiles)
 
 function(vstd_require_cxx26_feature name source)
@@ -53,7 +59,3 @@ vstd_require_cxx26_feature(MOVE_ONLY_FUNCTION [[
         return callback() - 4;
     }
 ]])
-if(NOT "cxx_std_26" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-    message(FATAL_ERROR "C++26 is required without fallback. Use GCC 15+ or clang-cl 20.1.8+ with CMake 4.0.2+.")
-endif()
-
