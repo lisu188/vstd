@@ -429,6 +429,20 @@ class operation : public std::enable_shared_from_this<operation>
         return true;
     }
 
+    void endProbe()
+    {
+        bool cancelled;
+        {
+            std::lock_guard lock(mutex);
+            executing = false;
+            cancelled = stopping();
+        }
+        if (cancelled)
+        {
+            complete(std::make_exception_ptr(task_cancelled()));
+        }
+    }
+
     void reject()
     {
         std::lock_guard lock(mutex);
@@ -1068,9 +1082,15 @@ template <typename Loop, typename Predicate> class condition_awaiter : public ta
             {
                 if (auto operation = weak.lock())
                 {
+                    if (!operation->beginWork())
+                    {
+                        return true;
+                    }
                     try
                     {
-                        return (*predicate)();
+                        const bool ready = (*predicate)();
+                        operation->endProbe();
+                        return ready;
                     }
                     catch (...)
                     {

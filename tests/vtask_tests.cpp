@@ -461,6 +461,42 @@ vstd::task<void> waitLongDelay(std::shared_ptr<vstd::event_loop<>> loop)
     co_await vstd::sleepFor(loop, std::chrono::hours(24 * 365));
 }
 
+vstd::task<void> retainedPredicate(std::shared_ptr<vstd::event_loop<>> loop, std::promise<void>& entered,
+                                   std::shared_future<void> release, int& destroyed)
+{
+    destruction_guard guard{destroyed};
+    co_await vstd::until(loop,
+                         [&]
+                         {
+                             entered.set_value();
+                             release.wait();
+                             assert(destroyed == 0);
+                             return true;
+                         });
+}
+
+void testPredicateCancellationRetainsFrame()
+{
+    auto loop = std::make_shared<vstd::event_loop<>>();
+    vstd::task_group group;
+    std::promise<void> entered, release;
+    int destroyed = 0;
+    auto handle = group.spawn(retainedPredicate(loop, entered, release.get_future().share(), destroyed));
+    auto entered_future = entered.get_future();
+    std::jthread cancel(
+        [handle, &destroyed, &release, &entered_future]
+        {
+            entered_future.wait();
+            handle.requestStop();
+            assert(!handle.finished() && destroyed == 0);
+            release.set_value();
+        });
+    loop->runReady();
+    cancel.join();
+    assert(handle.join() && destroyed == 1);
+    expectThrow<vstd::task_cancelled>([&] { handle.get(); });
+}
+
 void testEventLoopPhasesAndCleanup()
 {
     auto loop = std::make_shared<vstd::event_loop<>>();
@@ -561,6 +597,7 @@ int main()
     testCompletionCancellationRaces();
 #ifdef VSTD_TEST_EVENT_LOOP
     testEventLoopPhasesAndCleanup();
+    testPredicateCancellationRetainsFrame();
 #endif
     std::cout << "task regression checks passed\n";
 }
