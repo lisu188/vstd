@@ -59,6 +59,59 @@ when updating this header-only library because the change affects its virtual ta
 - `camel` retains its existing spacing, including the trailing space for a multiword input.
 - `tuple_size` retains its existing `void` sentinel behavior, including an empty type list.
 
+## Coroutine ownership and scheduling
+
+Include `vtask.h` for `task<T>`, `task_handle<T>`, and `task_group`. A task is lazy and move-only; its body starts
+inline on the spawning thread and runs until the first suspension. Supported results are `void` and copyable owned
+values. A handle is copyable, supports multiple awaiters, and returns an independent copy on each successful read.
+References are not task results. Give coroutine functions their owned arguments by value: a coroutine lambda does
+not extend the lifetime of its closure.
+
+```cpp
+vstd::task<int> compute(std::shared_ptr<vstd::event_loop<>> mainLoop,
+                        std::shared_ptr<vstd::thread_pool<2>> workers,
+                        std::unique_ptr<int> input)
+{
+    co_await vstd::post(mainLoop);
+    co_return co_await vstd::work(workers, [input = std::move(input)] { return *input + 1; });
+}
+
+vstd::task_group session;
+auto handle = session.spawn(compute(mainLoop, workers, std::make_unique<int>(41)),
+                            vstd::loopScheduler(mainLoop));
+```
+
+`post(loop)` switches to the main loop; `work(pool)` switches to a worker. Both change the scheduler captured by
+subsequent awaits. `work(pool, callable)` instead executes owned one-shot work on a worker and resumes its caller
+through the previously captured scheduler. The callable may own move-only captures. `sleepFor(loop, duration)`,
+`until(loop, predicate)`, and `nextFrame(loop)` register with the existing timer, condition, and frame phases and
+resume through the caller's captured scheduler. Posting during a queue snapshot waits for a later snapshot.
+Cancellation removes suspended timer, condition, and frame registrations. Reusable observers remain copyable
+`std::function` callbacks and use the event loop's copied observer snapshots.
+
+A scheduler must either accept ownership of its callback or reject it. Rejected or discarded continuations fail
+with `scheduler_rejected`, including execution-completion awaits. Error unwinding can run inline after rejection;
+code requiring thread affinity must not assume a rejected dispatch reached its target thread.
+
+Cancellation is cooperative. `requestStop()` settles an outstanding result with `task_cancelled` once and requests
+its stop token. Work cancelled before it starts skips its body; work already running completes or observes
+`co_await thisTaskStopToken()`. Result settlement and execution completion are separate states: `ready()` and `get()`
+describe the result, while `finished()`, `waitFinished()`, and `join()` describe completion of execution and destruction
+of the coroutine frame. A cancelled result may be ready while worker code is still running.
+
+`whenAll(vector<task_handle<T>>)` preserves input order. The first child failure requests cancellation of all remaining
+children, and the join waits for every child's execution to finish before propagating the error. A failure to schedule
+a join continuation follows the same cancel-and-drain contract.
+
+Each runtime owner should keep a task group, reject new work when shutdown begins, request cancellation, and retain
+the resources used by tasks until `finished()` is true. The group destructor only requests cancellation; it does not
+block. `join()` returns `false` inside any task owned by that group, and `ownsCurrentTask()` supports an explicit
+deferred-teardown path. Never block a loop thread on `get()` or `join()` while its continuations need that loop to run.
+Synchronous entry adapters must provide a deliberate wait boundary and release interpreter locks as appropriate.
+
+Legacy `future` and threading facade behavior remains available to external consumers. New coroutine clients should
+use explicit awaitables and session ownership rather than installing nested event-loop polling in native flows.
+
 ## Validation
 
 Follow `AGENTS.md` and run the CMake `format` and `format-check` targets before committing C++ changes. CTest runs
