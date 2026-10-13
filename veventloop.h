@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -26,7 +26,6 @@
 
 #ifdef SDL_h_
 
-#include "vfuture.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -53,7 +52,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     {
         clock::time_point due;
         std::size_t id;
-        std::function<void()> function;
+        std::shared_ptr<std::move_only_function<void()>> function;
         std::shared_ptr<std::atomic_bool> cancelled;
     };
 
@@ -69,7 +68,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     {
         std::size_t id;
         std::function<bool()> predicate;
-        std::function<void()> function;
+        std::shared_ptr<std::move_only_function<void()>> function;
         std::shared_ptr<std::atomic_bool> cancelled;
     };
 
@@ -125,13 +124,13 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         return loop;
     }
 
-    bool invoke(const std::function<void()>& function)
+    bool invoke(std::move_only_function<void()> function)
     {
         try
         {
             {
                 std::lock_guard lock(taskMutex);
-                taskQueue.push(function);
+                taskQueue.push(std::move(function));
             }
             wake();
             return true;
@@ -143,18 +142,19 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void invoke_when(const std::function<bool()>& predicate, const std::function<void()>& function)
+    void invoke_when(const std::function<bool()>& predicate, std::move_only_function<void()> function)
     {
-        scheduleWhen(predicate, function).release();
+        scheduleWhen(predicate, std::move(function)).release();
     }
 
-    connection scheduleWhen(const std::function<bool()>& predicate, const std::function<void()>& function)
+    connection scheduleWhen(const std::function<bool()>& predicate, std::move_only_function<void()> function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
         auto cancelled = std::make_shared<std::atomic_bool>(false);
         {
             std::lock_guard lock(conditionalMutex);
-            conditionalQueue.push_back({id, predicate, function, cancelled});
+            conditionalQueue.push_back(
+                {id, predicate, std::make_shared<std::move_only_function<void()>>(std::move(function)), cancelled});
         }
         wake();
         return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
@@ -200,19 +200,20 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void delay(int milliseconds, const std::function<void()>& function)
+    void delay(int milliseconds, std::move_only_function<void()> function)
     {
-        scheduleAfter(milliseconds, function).release();
+        scheduleAfter(milliseconds, std::move(function)).release();
     }
 
-    connection scheduleAfter(int milliseconds, const std::function<void()>& function)
+    connection scheduleAfter(int milliseconds, std::move_only_function<void()> function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
         auto cancelled = std::make_shared<std::atomic_bool>(false);
         const auto due = clock::now() + std::chrono::milliseconds(std::max(milliseconds, 0));
         {
             std::lock_guard lock(delayMutex);
-            delayQueue.push({due, id, function, cancelled});
+            delayQueue.push(
+                {due, id, std::make_shared<std::move_only_function<void()>>(std::move(function)), cancelled});
         }
         wake();
         return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
@@ -460,7 +461,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     std::size_t drainPostedTasks()
     {
-        std::queue<std::function<void()>> ready;
+        std::queue<std::move_only_function<void()>> ready;
         {
             std::lock_guard lock(taskMutex);
             ready.swap(taskQueue);
@@ -543,7 +544,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
             if (removeCondition(conditionTask.id))
             {
-                safeInvoke(conditionTask.function);
+                safeInvoke(*conditionTask.function);
                 ++processed;
             }
         }
@@ -568,7 +569,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         {
             if (!delayed.cancelled->load(std::memory_order_relaxed))
             {
-                safeInvoke(delayed.function);
+                safeInvoke(*delayed.function);
                 ++processed;
             }
         }
@@ -642,7 +643,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     std::atomic_size_t nextId{1};
 
     mutable std::mutex taskMutex;
-    std::queue<std::function<void()>> taskQueue;
+    std::queue<std::move_only_function<void()>> taskQueue;
 
     mutable std::mutex delayMutex;
     std::priority_queue<delayed_task, std::vector<delayed_task>, delay_compare> delayQueue;

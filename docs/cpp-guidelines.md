@@ -1,6 +1,9 @@
 # C++ language and library guidelines
 
-Build and consume `vstd` as C++23 with extensions disabled. Use the
+Build and consume `vstd` as C++26 with extensions disabled and standard fallback prohibited. CMake 4.0.2 is the
+minimum; CI provisions 4.3.1. Supported desktop toolchains are GCC 15, Clang 20 with a compatible standard library,
+and LLVM 20.1.8 clang-cl with the Visual Studio 2022 standard library. Configuration probes the required language
+and library facilities. Use the
 [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)
 for interfaces, resource ownership, and object lifetimes. Apply improvements incrementally and retain public
 utility names and existing consumer contracts. Check new facilities against the
@@ -13,8 +16,14 @@ membership is needed. Use `.empty()` to express emptiness. Keep byte classificat
 
 Use constrained `std::invoke` for general callable invocation, including mutable lambdas, function pointers, and
 member pointers. `functional::call` retains its existing by-value callable and argument parameters; invocation uses
-those local copies as lvalues. Use `std::ref` when an explicit reference is required. Delegate type-list element lookup
-to `std::tuple_element` and avoid reserved identifiers in template parameters.
+those local copies as lvalues. Use `std::ref` when an explicit reference is required. Callable argument selection
+uses C++26 pack indexing, retaining the nullary `void` first-argument sentinel. The public `tuple_element` helper
+still delegates to `std::tuple_element`; avoid reserved identifiers in template parameters.
+
+Use `std::move_only_function` for owned one-shot work. Keep `std::function` for callbacks that need to be copied,
+including observer snapshots. Do not assume availability of `std::inplace_vector`, `std::function_ref`, or the
+saturation library on the selected Windows standard library. Deleted borrowed-reference overloads state why
+temporaries cannot be used; the lifetime and ownership contracts remain unchanged.
 
 When a member pointer returns a reference, `functional::call` requires a raw-pointer or `std::reference_wrapper`
 receiver. Returning a reference into a copied receiver would dangle as the call exits. The caller must keep the borrowed
@@ -41,5 +50,7 @@ when updating this header-only library because the change affects its virtual ta
 
 Follow `AGENTS.md` and run the CMake `format` and `format-check` targets before committing C++ changes. CTest runs
 focused string and callable/type-list regressions alongside the existing reflection, future, neural, random, and
-header self-sufficiency tests. The upstream workflow builds Debug and Release with GCC and Clang. Consumer integration
+header self-sufficiency and coroutine tests. The upstream workflow builds Debug and Release with GCC, Clang, and
+Windows clang-cl, and retains Linux address/undefined/thread sanitizer checks. The setup source-preservation
+regression runs without a native build. Consumer integration
 must also rebuild and test the game on Linux and Windows, including its performance guards and coverage gate.

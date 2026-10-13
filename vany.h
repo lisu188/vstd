@@ -1,6 +1,6 @@
 /*
  * MIT License
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -146,11 +146,11 @@ T any_cast(const std::any& value)
 
 template <typename T>
     requires(std::is_reference_v<T>)
-T any_cast(std::any&&) = delete;
+T any_cast(std::any&&) = delete("a reference into a temporary std::any would dangle");
 
 template <typename T>
     requires(std::is_reference_v<T>)
-T any_cast(const std::any&&) = delete;
+T any_cast(const std::any&&) = delete("a reference into a temporary std::any would dangle");
 
 template <typename T, typename U> void register_any_type()
 {

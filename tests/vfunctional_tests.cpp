@@ -1,3 +1,4 @@
+#include "vany.h"
 #include "vfunctional.h"
 #include "vtraits.h"
 #include "vtuple.h"
@@ -88,8 +89,28 @@ static_assert(vstd::tuple_size<void, int>::size == 2);
 static_assert(vstd::tuple_size<int, void, int>::size == 3);
 using NullaryCallback = decltype([]() { return 7; });
 using UnaryCallback = decltype([](int value) { return value + 1; });
+using MixedCallback = decltype([](const std::string&, int*, volatile long&&) {});
 static_assert(std::is_same_v<vstd::function_traits<NullaryCallback>::first_arg, void>);
+static_assert(std::is_same_v<vstd::function_traits<NullaryCallback>::arg<0>::type, void>);
 static_assert(std::is_same_v<vstd::function_traits<UnaryCallback>::first_arg, int>);
+static_assert(vstd::function_traits<MixedCallback>::arity == 3);
+static_assert(std::is_same_v<vstd::function_traits<MixedCallback>::arg<0>::type, const std::string&>);
+static_assert(std::is_same_v<vstd::function_traits<MixedCallback>::arg<1>::type, int*>);
+static_assert(std::is_same_v<vstd::function_traits<MixedCallback>::arg<2>::type, volatile long&&>);
+
+template <std::size_t Index, typename... Args>
+concept HasArgument = requires { vstd::detail::args<Index, Args...>(); };
+static_assert(HasArgument<0>);
+static_assert(!HasArgument<1>);
+static_assert(!HasArgument<1, int>);
+
+template <typename Result, typename Value>
+concept CanBorrowAny = requires(Value&& value) { vstd::any_cast<Result>(std::forward<Value>(value)); };
+static_assert(CanBorrowAny<int&, std::any&>);
+static_assert(CanBorrowAny<const int&, const std::any&>);
+static_assert(!CanBorrowAny<int&, std::any>);
+static_assert(!CanBorrowAny<const int&, std::any>);
+static_assert(!CanBorrowAny<const int&, const std::any>);
 
 void checkCallableKinds()
 {

@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -38,7 +38,7 @@ class worker_thread
     template <typename thread_pool_type>
     void operator()(std::stop_token stop_token, std::shared_ptr<thread_pool_type> pool)
     {
-        std::function<void()> task;
+        std::move_only_function<void()> task;
         while (pool->pop_task(task, stop_token))
         {
             try
@@ -67,6 +67,11 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
     template <typename F, typename... Args> void execute(F&& f, Args&&... args)
     {
         push_task(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+    }
+
+    bool submit(std::move_only_function<void()> task)
+    {
+        return push_task(std::move(task));
     }
 
     std::shared_ptr<thread_pool> start()
@@ -111,18 +116,19 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         _workers.emplace_back(worker_thread(), this->shared_from_this());
     }
 
-    void push_task(std::function<void()> task)
+    bool push_task(std::move_only_function<void()> task)
     {
         std::unique_lock<std::recursive_mutex> lock(_queue_lock);
         if (_queue_shutdown)
         {
-            return;
+            return false;
         }
         _queue.push(std::move(task));
         _queue_condition.notify_one();
+        return true;
     }
 
-    bool pop_task(std::function<void()>& task, std::stop_token stop_token)
+    bool pop_task(std::move_only_function<void()>& task, std::stop_token stop_token)
     {
         std::unique_lock<std::recursive_mutex> lock(_queue_lock);
         std::stop_callback on_stop(stop_token, [this]() { _queue_condition.notify_all(); });
@@ -153,7 +159,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         _queue_shutdown = false;
     }
 
-    std::queue<std::function<void()>> _queue;
+    std::queue<std::move_only_function<void()>> _queue;
     std::recursive_mutex _queue_lock;
     std::condition_variable_any _queue_condition;
     std::vector<std::jthread> _workers;
