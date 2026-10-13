@@ -173,6 +173,104 @@ vstd::task<void> nestedSelfJoinRoot(std::shared_ptr<manual_queue> queue, vstd::t
     co_await nestedSelfJoin(queue, group, ancestor, rejected);
 }
 
+vstd::task<void> workerSelfJoin(std::shared_ptr<vstd::thread_pool<1>> pool, vstd::task_group& group, bool& rejected)
+{
+    co_await vstd::work(pool,
+                        [&]
+                        {
+                            assert(group.ownsCurrentTask() && !group.finished());
+                            rejected = !group.join();
+                            group.requestStop();
+                        });
+}
+
+void testOwnedWorkerSelfJoinAndScopeCleanup()
+{
+    auto pool = std::make_shared<vstd::thread_pool<1>>()->start();
+    vstd::task_group group;
+    bool rejected = false;
+    auto handle = group.spawn(workerSelfJoin(pool, group, rejected));
+    assert(handle.join() && rejected && group.finished());
+    expectThrow<vstd::task_cancelled>([&] { handle.get(); });
+    std::promise<void> unowned;
+    pool->execute(
+        [&]
+        {
+            assert(!group.ownsCurrentTask());
+            unowned.set_value();
+        });
+    unowned.get_future().wait();
+    pool->stop();
+}
+
+vstd::task<void> synchronousChild(vstd::task_group& outer, vstd::task_group& inner, bool& observed)
+{
+    assert(outer.ownsCurrentTask() && inner.ownsCurrentTask());
+    assert(!outer.join() && !inner.join());
+    observed = true;
+    co_return;
+}
+
+void spawnSynchronousChild(vstd::task_group& outer, bool& observed)
+{
+    vstd::task_group inner;
+    auto child = inner.spawn(synchronousChild(outer, inner, observed));
+    child.get();
+    assert(child.finished() && inner.join() && !inner.ownsCurrentTask() && outer.ownsCurrentTask());
+}
+
+vstd::task<void> synchronousParent(vstd::task_group& outer, bool& observed)
+{
+    spawnSynchronousChild(outer, observed);
+    co_return;
+}
+
+vstd::task<void> synchronousWorkerParent(std::shared_ptr<vstd::thread_pool<1>> pool, vstd::task_group& outer,
+                                         bool& observed)
+{
+    co_await vstd::work(pool, [&] { spawnSynchronousChild(outer, observed); });
+}
+
+vstd::task<void> independentChild(std::shared_ptr<manual_queue> queue, vstd::task_group& outer, bool& owned)
+{
+    co_await vstd::post(queue);
+    owned = outer.ownsCurrentTask();
+}
+
+vstd::task<void> startIndependentChild(std::shared_ptr<manual_queue> queue, vstd::task_group& outer,
+                                       vstd::task_group& independent, vstd::task_handle<void>& child, bool& owned)
+{
+    child = independent.spawn(independentChild(queue, outer, owned));
+    co_return;
+}
+
+void testSynchronousExecutionAncestryKeepsGroupsIndependent()
+{
+    auto pool = std::make_shared<vstd::thread_pool<1>>()->start();
+    for (const bool worker : {false, true})
+    {
+        vstd::task_group outer;
+        bool observed = false;
+        auto parent =
+            outer.spawn(worker ? synchronousWorkerParent(pool, outer, observed) : synchronousParent(outer, observed));
+        assert(parent.join() && observed && outer.finished());
+        parent.get();
+    }
+    pool->stop();
+
+    auto queue = std::make_shared<manual_queue>();
+    vstd::task_group outer, independent;
+    vstd::task_handle<void> child;
+    bool owned = true;
+    auto parent = outer.spawn(startIndependentChild(queue, outer, independent, child, owned));
+    assert(parent.finished() && !child.ready());
+    outer.requestStop();
+    assert(!child.ready());
+    queue->run();
+    child.get();
+    assert(child.finished() && !owned);
+}
+
 vstd::task<void> waitExecution(vstd::task_handle<int> child, bool& resumed)
 {
     co_await child.waitFinished();
@@ -484,6 +582,46 @@ vstd::task<void> waitConditionFailure(std::shared_ptr<vstd::event_loop<>> loop)
     co_await vstd::until(loop, []() -> bool { throw std::runtime_error("predicate failure"); });
 }
 
+vstd::task<void> conditionSelfJoin(std::shared_ptr<vstd::event_loop<>> loop, vstd::task_group& group, bool& rejected)
+{
+    co_await vstd::until(loop,
+                         [&]
+                         {
+                             assert(group.ownsCurrentTask() && !group.finished());
+                             rejected = !group.join();
+                             group.requestStop();
+                             return true;
+                         });
+}
+
+vstd::task<void> frameSelfJoin(std::shared_ptr<vstd::event_loop<>> loop, vstd::task_group& group, bool& rejected)
+{
+    co_await vstd::nextFrame(loop);
+    assert(group.ownsCurrentTask() && !group.finished());
+    rejected = !group.join();
+    group.requestStop();
+}
+
+void testOwnedConditionAndFrameSelfJoin()
+{
+    auto loop = std::make_shared<vstd::event_loop<>>();
+    for (const bool frame : {false, true})
+    {
+        vstd::task_group group;
+        bool rejected = false;
+        auto handle =
+            group.spawn(frame ? frameSelfJoin(loop, group, rejected) : conditionSelfJoin(loop, group, rejected),
+                        vstd::loopScheduler(loop));
+        for (int phase = 0; phase < 8 && !handle.finished(); ++phase)
+        {
+            loop->runFrame();
+        }
+        assert(rejected && handle.finished() && group.finished() && !group.ownsCurrentTask());
+        assert(loop->getConditionalTaskCount() == 0 && loop->getFrameCallbackCount() == 0);
+        expectThrow<vstd::task_cancelled>([&] { handle.get(); });
+    }
+}
+
 vstd::task<void> waitLongDelay(std::shared_ptr<vstd::event_loop<>> loop)
 {
     co_await vstd::sleepFor(loop, std::chrono::hours(24 * 365));
@@ -619,6 +757,8 @@ int main()
     testRejectionAndDroppedTickets();
     testQueuedCancellationAndMoveOnlyWork();
     testFrameRetentionAndGroupStop();
+    testOwnedWorkerSelfJoinAndScopeCleanup();
+    testSynchronousExecutionAncestryKeepsGroupsIndependent();
     testOrderedWhenAllAndFailureJoin();
     testNestedCancellationAndWorkerAffinity();
     testWhenAllDrainsAfterSchedulerRejection();
@@ -626,6 +766,7 @@ int main()
 #ifdef VSTD_TEST_EVENT_LOOP
     testEventLoopPhasesAndCleanup();
     testPredicateCancellationRetainsFrame();
+    testOwnedConditionAndFrameSelfJoin();
 #endif
     std::cout << "task regression checks passed\n";
 }
