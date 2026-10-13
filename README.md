@@ -4,7 +4,11 @@
 asynchronous execution, type utilities, reflection, logging, conversion helpers, and
 small algorithmic/data-structure conveniences.
 
-The build requires C++23 with compiler extensions disabled. See the
+The build requires CMake 4.0.2 or newer and C++26 with compiler extensions disabled and no standard fallback.
+CI provisions CMake 4.3.1 and tests GCC 15 and Clang 20 on Ubuntu 26.04, plus LLVM 20.1.8 clang-cl with
+the Visual Studio 2022 SDK, runtime, and standard library on Windows 2022. Configuration checks pack indexing,
+deleted-function reasons, coroutines, `std::expected`, and `std::move_only_function` before loading dependencies.
+Consumers using CMake can link `vstd::headers` to inherit the `cxx_std_26` requirement. See the
 [C++ guidelines](docs/cpp-guidelines.md) for supported standard-library idioms,
 compatibility contracts, and validation requirements.
 
@@ -87,6 +91,11 @@ must not retain shared ownership of the pool itself.
 
 ### Concurrency and asynchronous runtime
 
+- **`vtask.h`**
+  Lazy move-only coroutine tasks, shared task handles, task groups, cooperative cancellation, scheduler-aware
+  continuations, and ordered joins. Owned one-shot work uses `std::move_only_function`; reusable observers retain
+  their copyable callback contracts. Legacy `vfuture.h` remains available to existing consumers.
+
 - **`vthreadpool.h`**  
   Thread pool implementation with worker loop and stop-token-aware task processing.
 
@@ -160,12 +169,19 @@ must not retain shared ownership of the pool itself.
 Project configuration and checks are CMake-driven.
 
 ```bash
-cmake -S . -B build
-cmake --build build --target format-check
+cmake -S . -B build-cxx26-gcc15 -DCMAKE_CXX_COMPILER=g++-15
+cmake --build build-cxx26-gcc15 --target format-check
+cmake --build build-cxx26-gcc15 --parallel
+ctest --test-dir build-cxx26-gcc15 --output-on-failure
 ```
 
 If formatting drift is reported:
 
 ```bash
-cmake --build build --target format
+cmake --build build-cxx26-gcc15 --target format
 ```
+
+Use a separate build directory when changing compilers. `configure.sh` defaults to `g++-15` and `build-cxx26`;
+override `CXX` and `VSTD_BUILD_DIR` together for another supported compiler. Setup installs system dependencies
+when requested and configures the existing source without rewriting it. Install CMake 4.0.2 or newer beforehand.
+Run `python tests/toolchain_setup_tests.py` to check source preservation without configuring or building.

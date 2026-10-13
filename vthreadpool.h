@@ -58,18 +58,19 @@ class ThreadPoolWorkerScope
 class ThreadPoolQueue
 {
   public:
-    void push_task(std::function<void()> task)
+    bool push_task(std::move_only_function<void()> task)
     {
         std::unique_lock lock(_lock);
         if (_shutdown)
         {
-            return;
+            return false;
         }
         _queue.push(std::move(task));
         _condition.notify_one();
+        return true;
     }
 
-    bool pop_task(std::function<void()>& task, std::stop_token stop_token)
+    bool pop_task(std::move_only_function<void()>& task, std::stop_token stop_token)
     {
         std::unique_lock lock(_lock);
         std::stop_callback on_stop(stop_token, [this]() { _condition.notify_all(); });
@@ -92,7 +93,7 @@ class ThreadPoolQueue
     }
 
   private:
-    std::queue<std::function<void()>> _queue;
+    std::queue<std::move_only_function<void()>> _queue;
     std::mutex _lock;
     std::condition_variable _condition;
     bool _shutdown = false;
@@ -104,7 +105,7 @@ class worker_thread
     template <typename thread_pool_type>
     void operator()(std::stop_token stop_token, std::shared_ptr<thread_pool_type> pool)
     {
-        std::function<void()> task;
+        std::move_only_function<void()> task;
         while (pool->pop_task(task, stop_token))
         {
             try
@@ -137,6 +138,16 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
             queue = _queue;
         }
         queue->push_task(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+    }
+
+    bool submit(std::move_only_function<void()> task)
+    {
+        std::shared_ptr<detail::ThreadPoolQueue> queue;
+        {
+            std::unique_lock lock(_worker_lock);
+            queue = _queue;
+        }
+        return queue->push_task(std::move(task));
     }
 
     std::shared_ptr<thread_pool> start()

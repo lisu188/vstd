@@ -8,16 +8,23 @@
 #
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 4.0.2)
 project(vstd LANGUAGES CXX)
 
 if(POLICY CMP0167)
   cmake_policy(SET CMP0167 NEW)
 endif()
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(cmake/RequireCxx26.cmake)
+
+add_library(vstd_headers INTERFACE)
+add_library(vstd::headers ALIAS vstd_headers)
+target_compile_features(vstd_headers INTERFACE cxx_std_26)
+target_include_directories(vstd_headers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Boost 1.58 REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
@@ -45,6 +52,7 @@ set(SOURCE_FILES
         vcache.h
         vstd.h
         vstring.h
+        vtask.h
         vmeta.h
         vneuro.h
         vany.h
@@ -53,7 +61,7 @@ set(SOURCE_FILES
 
 add_executable(vstd ${SOURCE_FILES} main.cpp)
 
-target_link_libraries(vstd PRIVATE Boost::filesystem Threads::Threads)
+target_link_libraries(vstd PRIVATE vstd::headers Boost::filesystem Threads::Threads)
 
 enable_testing()
 
@@ -83,10 +91,10 @@ if(VSTD_BUILD_BENCHMARKS)
 endif()
 
 foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests vfunctional_tests vstring_tests
-                  vbind_tests vutil_regressions vthreadpool_regressions)
+                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(${TEST_NAME} PRIVATE Threads::Threads)
+    target_link_libraries(${TEST_NAME} PRIVATE vstd::headers Threads::Threads)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     if(MSVC)
         target_compile_options(${TEST_NAME} PRIVATE /UNDEBUG)
@@ -115,6 +123,18 @@ if(SDL2_FOUND)
         target_compile_options(vruntime_regressions PRIVATE /UNDEBUG)
     else()
         target_compile_options(vruntime_regressions PRIVATE -UNDEBUG)
+    endif()
+
+    add_executable(vtask_eventloop_tests tests/vtask_tests.cpp)
+    target_compile_definitions(vtask_eventloop_tests PRIVATE VSTD_TEST_EVENT_LOOP=1)
+    target_link_libraries(vtask_eventloop_tests PRIVATE vstd::headers Threads::Threads SDL2::SDL2)
+    add_test(NAME vtask_eventloop_tests COMMAND vtask_eventloop_tests)
+    set_tests_properties(vtask_eventloop_tests PROPERTIES TIMEOUT 20
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+    if(MSVC)
+        target_compile_options(vtask_eventloop_tests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(vtask_eventloop_tests PRIVATE -UNDEBUG)
     endif()
 else()
     message(STATUS "SDL2 not found: headless event-loop regression tests are unavailable")
@@ -174,6 +194,7 @@ if(CLANG_FORMAT_EXE)
             tests/vrandom_tests.cpp
             tests/vfunctional_tests.cpp
             tests/vstring_tests.cpp
+            tests/vtask_tests.cpp
             tests/vbind_tests.cpp
             tests/vutil_regressions.cpp
             tests/vthreadpool_regressions.cpp

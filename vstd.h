@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2019 Andrzej Lis
+ * Copyright (c) 2019-2026 Andrzej Lis
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -35,6 +35,7 @@
 #include "vmeta.h"
 #include "vneuro.h"
 #include "vstring.h"
+#include "vtask.h"
 #include "vthread.h"
 #include "vtraits.h"
 #include "vtuple.h"

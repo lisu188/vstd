@@ -5,14 +5,13 @@ set -Eeuo pipefail
 #
 # What it does:
 #   1. Installs the system packages needed by the repo on Codex's Ubuntu-based image.
-#   2. Applies two compatibility fixes required by the current upstream sources:
-#        - vfunctional.h uses std::unordered_map without including <unordered_map>
-#        - CMakeLists.txt enforces C++23 so the project uses the newest standard supported by the Codex toolchain
-#   3. Runs a smoke build so the environment cache already contains a verified build tree.
+#   2. Runs a C++26 smoke build without modifying checked-in source files.
 #
 # Optional knobs for debugging/local testing:
 #   VSTD_SKIP_INSTALL=1  -> do not run apt-get
 #   VSTD_SKIP_BUILD=1    -> do not run cmake build
+#   CXX                 -> select a C++26 toolchain (defaults to GCC 15)
+#   VSTD_BUILD_DIR      -> select a fresh build tree when changing toolchains
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
@@ -50,7 +49,8 @@ install_deps() {
   run_as_root apt-get update
   run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
-    cmake \
+    gcc-15 \
+    g++-15 \
     ninja-build \
     pkg-config \
     python3-dev \
@@ -59,77 +59,11 @@ install_deps() {
     libboost-system-dev \
     libboost-filesystem-dev \
     libboost-python-dev
-}
 
-patch_repo() {
-  log "Applying compatibility patches for modern Codex toolchains"
-  python3 <<'PY'
-from pathlib import Path
-import re
-
-root = Path('.')
-
-vf = root / 'vfunctional.h'
-text = vf.read_text()
-if '#include <unordered_map>' not in text:
-    if '#pragma once' in text:
-        text = text.replace('#pragma once', '#pragma once\n#include <unordered_map>', 1)
-    else:
-        text = '#include <unordered_map>\n' + text
-    vf.write_text(text)
-
-cm = root / 'CMakeLists.txt'
-text = cm.read_text()
-orig = text
-
-text = re.sub(
-    r'cmake_minimum_required\(VERSION\s+[0-9.]+\)',
-    'cmake_minimum_required(VERSION 3.16)',
-    text,
-    count=1,
-    flags=re.IGNORECASE,
-)
-text = re.sub(r'project\(\s*vstd\s*\)', 'project(vstd LANGUAGES CXX)', text, count=1)
-
-policy_block = 'if(POLICY CMP0167)\n  cmake_policy(SET CMP0167 NEW)\nendif()'
-if 'CMP0167' not in text:
-    text = text.replace('project(vstd LANGUAGES CXX)', f'project(vstd LANGUAGES CXX)\n\n{policy_block}', 1)
-
-std_block = 'set(CMAKE_CXX_STANDARD 23)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)'
-if 'CMAKE_CXX_STANDARD' not in text:
-    text = re.sub(
-        r'set\(CMAKE_CXX_FLAGS\s+"\$\{CMAKE_CXX_FLAGS\}\s*-std=c\+\+14"\)',
-        std_block,
-        text,
-        count=1,
-    )
-    if 'CMAKE_CXX_STANDARD' not in text:
-        text = text.replace(policy_block, policy_block + '\n\n' + std_block, 1)
-
-text = re.sub(
-    r'find_package\(Boost\s+1\.58\s+COMPONENTS\s+system\s+REQUIRED\)',
-    'find_package(Boost 1.58 REQUIRED COMPONENTS system filesystem)',
-    text,
-    count=1,
-    flags=re.IGNORECASE,
-)
-
-if 'find_package(Threads REQUIRED)' not in text:
-    anchor = 'find_package(Boost 1.58 REQUIRED COMPONENTS system filesystem)'
-    if anchor in text:
-        text = text.replace(anchor, anchor + '\nfind_package(Threads REQUIRED)', 1)
-
-text = re.sub(
-    r'target_link_libraries\(\s*vstd\s+\$\{Boost_LIBRARIES\}\s*\)',
-    'target_link_libraries(vstd PRIVATE Boost::system Boost::filesystem Threads::Threads)',
-    text,
-    count=1,
-    flags=re.IGNORECASE,
-)
-
-if text != orig:
-    cm.write_text(text)
-PY
+  if ! have cmake; then
+    echo "Install CMake 4.0.2 or newer (CI uses 4.3.1) before configuring vstd." >&2
+    exit 1
+  fi
 }
 
 smoke_build() {
@@ -144,8 +78,9 @@ smoke_build() {
     generator=(-G Ninja)
   fi
 
-  cmake -S . -B build "${generator[@]}"
-  cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+  local build_dir="${VSTD_BUILD_DIR:-build-cxx26}"
+  cmake -S . -B "$build_dir" "${generator[@]}" -DCMAKE_CXX_COMPILER="${CXX:-g++-15}"
+  cmake --build "$build_dir" --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
 }
 
 main() {
@@ -155,7 +90,6 @@ main() {
   fi
 
   install_deps
-  patch_repo
   smoke_build
   log "vstd is ready for Codex Web"
 }

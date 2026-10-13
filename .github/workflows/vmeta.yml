@@ -7,39 +7,103 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++, clang++]
+        compiler: [g++-15, clang++-20]
         config: [Debug, Release]
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y clang clang-format libboost-filesystem-dev libboost-python-dev python3-dev libsdl2-dev
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DVSTD_REQUIRE_INTEGRATION_TESTS=ON
-      - run: cmake --build build --target format-check
-      - run: cmake --build build -j2
-      - run: ctest --test-dir build --output-on-failure
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CMake and C++26 toolchains
+        run: |
+          python -m pip install --disable-pip-version-check cmake==4.3.1
+          sudo apt-get update
+          sudo apt-get install -y g++-15 clang-20 clang-format-20 ninja-build libboost-filesystem-dev libboost-python-dev python3-dev libsdl2-dev
+      - name: Check setup preserves sources
+        run: python tests/toolchain_setup_tests.py
+      - name: Configure
+        run: >-
+          cmake -S . -B build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCLANG_FORMAT_EXE=clang-format-20 -DVSTD_REQUIRE_INTEGRATION_TESTS=ON
+          -DPython3_ROOT_DIR=/usr -DPython3_EXECUTABLE=/usr/bin/python3
+      - run: cmake --build build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --target format-check
+      - run: cmake --build build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --parallel 2
+      - run: ctest --test-dir build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --output-on-failure
+  windows:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Install pinned CMake and LLVM
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check cmake==4.3.1
+          if ($LASTEXITCODE -ne 0) { throw 'CMake installation failed' }
+          $clangCl = 'C:\Program Files\LLVM\bin\clang-cl.exe'
+          if (-not (Test-Path -LiteralPath $clangCl)) { throw 'Preinstalled LLVM 20.1.8 is missing' }
+          $version = & $clangCl --version
+          if ($LASTEXITCODE -ne 0 -or ($version -join "`n") -notmatch 'clang version 20\.1\.8(?:\s|$)') {
+            throw "Expected LLVM 20.1.8; found $version"
+          }
+          'C:\Program Files\LLVM\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Cache Boost dependencies
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vstd-cxx26-windows-2022-clang-cl-20.1.8-x64-windows-${{ hashFiles('.github/workflows/vmeta.yml') }}
+      - name: Install Boost modules used by public headers
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-filesystem:x64-windows boost-pool:x64-windows boost-range:x64-windows boost-algorithm:x64-windows
+          if ($LASTEXITCODE -ne 0) { throw 'Boost installation failed' }
+      - name: Check setup preserves sources
+        shell: pwsh
+        run: |
+          $env:BASH = 'C:\Program Files\Git\bin\bash.exe'
+          python tests/toolchain_setup_tests.py
+          if ($LASTEXITCODE -ne 0) { throw 'Setup regression failed' }
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S . -B build-cxx26-clang-cl-20.1.8-${{ matrix.config }} -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DCMAKE_CXX_COMPILER=clang-cl
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+      - run: cmake --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --target format-check
+      - run: cmake --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --parallel 2
+      - run: ctest --test-dir build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --output-on-failure
   sanitizers:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
         sanitizer: ['address,undefined', 'thread']
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libboost-filesystem-dev libsdl2-dev
+      - run: sudo apt-get update && sudo apt-get install -y g++-15 libboost-filesystem-dev libsdl2-dev
       - name: Configure sanitizer address-space compatibility
         if: matrix.sanitizer == 'thread'
         run: sudo sysctl vm.mmap_rnd_bits=28
-      - run: g++ -std=c++23 -O1 -g -pthread -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/vmeta_regressions.cpp -o vmeta-sanitized
-      - run: ./vmeta-sanitized
-        env:
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-          TSAN_OPTIONS: halt_on_error=1
-      - run: g++ -std=c++23 -O1 -g -pthread -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/vneuro_tests.cpp -o vneuro-sanitized
-      - run: ./vneuro-sanitized
+      - name: Run reflection, neural, and coroutine sanitizer regressions
+        run: |
+          for test in vmeta_regressions vneuro_tests vtask_tests; do
+            g++-15 -std=c++26 -O1 -g -pthread -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} "tests/$test.cpp" -o "$test-sanitized"
+            "./$test-sanitized"
+          done
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
@@ -48,10 +112,10 @@ jobs:
         run: |
           set -euo pipefail
           for test in vfunctional_tests vbind_tests vfuture_regressions vutil_regressions vthreadpool_regressions; do
-            g++ -std=c++23 -O1 -g -pthread -UNDEBUG -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/${test}.cpp -o ${test}-sanitized
+            g++-15 -std=c++26 -O1 -g -pthread -UNDEBUG -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/${test}.cpp -o ${test}-sanitized
             timeout 30 ./${test}-sanitized
           done
-          g++ -std=c++23 -O1 -g -pthread -UNDEBUG -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/vruntime_regressions.cpp -o vruntime-sanitized $(pkg-config --cflags --libs sdl2)
+          g++-15 -std=c++26 -O1 -g -pthread -UNDEBUG -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/vruntime_regressions.cpp -o vruntime-sanitized $(pkg-config --cflags --libs sdl2)
           timeout 30 ./vruntime-sanitized
         env:
           SDL_VIDEODRIVER: dummy

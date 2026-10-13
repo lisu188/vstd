@@ -26,7 +26,6 @@
 
 #ifdef SDL_h_
 
-#include "vfuture.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -35,6 +34,7 @@
 #include <exception>
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -53,29 +53,29 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     {
         clock::time_point due;
         std::size_t id;
-        std::function<void()> function;
+        std::shared_ptr<std::move_only_function<void()>> function;
         std::shared_ptr<std::atomic_bool> cancelled;
     };
 
-    struct delay_compare
+    struct delayed_state
     {
-        bool operator()(const delayed_task& a, const delayed_task& b) const
-        {
-            return a.due != b.due ? a.due > b.due : a.id > b.id;
-        }
+        std::mutex mutex;
+        std::map<std::pair<clock::time_point, std::size_t>, delayed_task> queue;
     };
 
     struct conditional_task
     {
         std::size_t id;
         std::function<bool()> predicate;
-        std::function<void()> function;
+        std::shared_ptr<std::move_only_function<void()>> function;
         std::shared_ptr<std::atomic_bool> cancelled;
         std::atomic_bool evaluating{false};
 
-        conditional_task(std::size_t id, std::function<bool()> predicate, std::function<void()> function,
+        conditional_task(std::size_t id, std::function<bool()> predicate, std::move_only_function<void()> function,
                          std::shared_ptr<std::atomic_bool> cancelled)
-            : id(id), predicate(std::move(predicate)), function(std::move(function)), cancelled(std::move(cancelled))
+            : id(id), predicate(std::move(predicate)),
+              function(std::make_shared<std::move_only_function<void()>>(std::move(function))),
+              cancelled(std::move(cancelled))
         {
         }
     };
@@ -83,7 +83,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     struct PostedTask
     {
         std::size_t id;
-        std::function<void()> function;
+        std::move_only_function<void()> function;
     };
 
     template <typename Function> struct RegisteredCallback
@@ -150,13 +150,13 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         return loop;
     }
 
-    bool invoke(const std::function<void()>& function)
+    bool invoke(std::move_only_function<void()> function)
     {
         try
         {
             {
                 std::lock_guard lock(taskMutex);
-                taskQueue.push({nextPostedTaskId++, function});
+                taskQueue.push({nextPostedTaskId++, std::move(function)});
             }
             wake();
             return true;
@@ -168,18 +168,19 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void invoke_when(const std::function<bool()>& predicate, const std::function<void()>& function)
+    void invoke_when(const std::function<bool()>& predicate, std::move_only_function<void()> function)
     {
-        scheduleWhen(predicate, function).release();
+        scheduleWhen(predicate, std::move(function)).release();
     }
 
-    connection scheduleWhen(const std::function<bool()>& predicate, const std::function<void()>& function)
+    connection scheduleWhen(const std::function<bool()>& predicate, std::move_only_function<void()> function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
         auto cancelled = std::make_shared<std::atomic_bool>(false);
         {
             std::lock_guard lock(conditionalMutex);
-            conditionalQueue.push_back(std::make_shared<conditional_task>(id, predicate, function, cancelled));
+            conditionalQueue.push_back(
+                std::make_shared<conditional_task>(id, predicate, std::move(function), cancelled));
         }
         wake();
         return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
@@ -225,22 +226,38 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void delay(int milliseconds, const std::function<void()>& function)
+    void delay(int milliseconds, std::move_only_function<void()> function)
     {
-        scheduleAfter(milliseconds, function).release();
+        scheduleAfter(milliseconds, std::move(function)).release();
     }
 
-    connection scheduleAfter(int milliseconds, const std::function<void()>& function)
+    connection scheduleAfter(int milliseconds, std::move_only_function<void()> function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
         auto cancelled = std::make_shared<std::atomic_bool>(false);
         const auto due = clock::now() + std::chrono::milliseconds(std::max(milliseconds, 0));
         {
-            std::lock_guard lock(delayMutex);
-            delayQueue.push({due, id, function, cancelled});
+            std::lock_guard lock(delays->mutex);
+            delays->queue.emplace(std::make_pair(due, id),
+                                  delayed_task{due, id,
+                                               std::make_shared<std::move_only_function<void()>>(std::move(function)),
+                                               cancelled});
         }
         wake();
-        return connection([cancelled]() { cancelled->store(true, std::memory_order_relaxed); });
+        std::weak_ptr<delayed_state> weak_delays = delays;
+        return connection(
+            [cancelled, weak_delays, due, id]()
+            {
+                cancelled->store(true, std::memory_order_relaxed);
+                if (auto state = weak_delays.lock())
+                {
+                    typename decltype(state->queue)::node_type retired;
+                    {
+                        std::lock_guard lock(state->mutex);
+                        retired = state->queue.extract({due, id});
+                    }
+                }
+            });
     }
 
     connection connectFrameCallback(const std::function<void(int)>& function)
@@ -379,8 +396,8 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             }
         }
         {
-            std::lock_guard lock(delayMutex);
-            if (!delayQueue.empty() && delayQueue.top().due <= clock::now())
+            std::lock_guard lock(delays->mutex);
+            if (!delays->queue.empty() && delays->queue.begin()->second.due <= clock::now())
             {
                 return true;
             }
@@ -402,8 +419,8 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
 
     std::size_t getDelayedTaskCount() const
     {
-        std::lock_guard lock(delayMutex);
-        return delayQueue.size();
+        std::lock_guard lock(delays->mutex);
+        return delays->queue.size();
     }
 
     std::size_t getFrameCallbackCount() const
@@ -510,7 +527,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         std::size_t processed = 0;
         while (true)
         {
-            std::function<void()> function;
+            std::move_only_function<void()> function;
             {
                 std::lock_guard lock(taskMutex);
                 if (taskQueue.empty() || taskQueue.front().id > lastTaskId)
@@ -600,7 +617,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             if (ready && removeCondition(conditionTask->id) &&
                 !conditionTask->cancelled->exchange(true, std::memory_order_acq_rel))
             {
-                safeInvoke(conditionTask->function);
+                safeInvoke(*conditionTask->function);
                 ++processed;
             }
             if (conditionTask->cancelled->load(std::memory_order_acquire))
@@ -616,7 +633,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         const auto now = clock::now();
         std::size_t limitId;
         {
-            std::lock_guard lock(delayMutex);
+            std::lock_guard lock(delays->mutex);
             limitId = nextId.load(std::memory_order_relaxed);
         }
 
@@ -625,17 +642,18 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         {
             delayed_task delayed;
             {
-                std::lock_guard lock(delayMutex);
-                if (delayQueue.empty() || delayQueue.top().due > now || delayQueue.top().id >= limitId)
+                std::lock_guard lock(delays->mutex);
+                if (delays->queue.empty() || delays->queue.begin()->second.due > now ||
+                    delays->queue.begin()->second.id >= limitId)
                 {
                     break;
                 }
-                delayed = delayQueue.top();
-                delayQueue.pop();
+                delayed = std::move(delays->queue.begin()->second);
+                delays->queue.erase(delays->queue.begin());
             }
             if (!delayed.cancelled->load(std::memory_order_relaxed))
             {
-                safeInvoke(delayed.function);
+                safeInvoke(*delayed.function);
                 ++processed;
             }
         }
@@ -712,8 +730,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     std::queue<PostedTask> taskQueue;
     std::size_t nextPostedTaskId = 0;
 
-    mutable std::mutex delayMutex;
-    std::priority_queue<delayed_task, std::vector<delayed_task>, delay_compare> delayQueue;
+    std::shared_ptr<delayed_state> delays = std::make_shared<delayed_state>();
 
     mutable std::mutex conditionalMutex;
     std::list<std::shared_ptr<conditional_task>> conditionalQueue;

@@ -47,15 +47,13 @@ struct return_type<ReturnType (ClassType::*)(Args...) const>
     typedef ReturnType type;
 };
 
-template <size_t i> void args(typename vstd::enable_if<i == 0>::type* = 0) {}
-
 template <size_t i, typename... Args>
-typename vstd::tuple_element<i, Args...>
+    requires(i < sizeof...(Args))
+auto args() -> Args...[i];
 
-    ::type args(typename vstd::disable_if<sizeof...(Args) == 0>::type* = 0)
-{
-    // return std::declval<typename std::tuple_element<i, std::tuple<Args...>>::type>() ;
-}
+template <size_t i>
+    requires(i == 0)
+auto args() -> void;
 } // namespace detail
 
 template <typename T> struct function_traits : public function_traits<decltype(&T::operator())>
