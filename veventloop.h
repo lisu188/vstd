@@ -470,6 +470,9 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         {
             throw std::runtime_error(SDL_GetError());
         }
+        // SDL's Windows tick initialization publishes its started flag before the frequency.
+        // Finish it on the loop owner before worker posts and event polling can race that first call.
+        (void)SDL_GetTicks();
         callFunctionEvent = SDL_RegisterEvents(1);
     }
 
