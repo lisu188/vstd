@@ -65,11 +65,11 @@ jobs:
         with:
           path: C:\vcpkg\installed
           key: vstd-cxx26-windows-2022-clang-cl-20.1.8-x64-windows-${{ hashFiles('.github/workflows/vmeta.yml') }}
-      - name: Install Boost modules used by public headers
+      - name: Install public-header and runtime-test dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-filesystem:x64-windows boost-pool:x64-windows boost-range:x64-windows boost-algorithm:x64-windows
-          if ($LASTEXITCODE -ne 0) { throw 'Boost installation failed' }
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-filesystem:x64-windows boost-pool:x64-windows boost-range:x64-windows boost-algorithm:x64-windows sdl2:x64-windows
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
       - name: Check setup preserves sources
         shell: pwsh
         run: |
@@ -83,6 +83,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DCMAKE_CXX_COMPILER=clang-cl
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DVSTD_REQUIRE_SDL_TESTS=ON
       - run: cmake --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --target format-check
       - run: cmake --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --parallel 2
       - run: ctest --test-dir build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --output-on-failure

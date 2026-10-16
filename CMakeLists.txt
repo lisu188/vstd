@@ -105,13 +105,26 @@ endforeach()
 set_tests_properties(vfuture_regressions vthreadpool_regressions PROPERTIES TIMEOUT 20)
 
 option(VSTD_REQUIRE_INTEGRATION_TESTS "Require SDL2 and Boost.Python regression dependencies" OFF)
+option(VSTD_REQUIRE_SDL_TESTS "Require headless SDL2 runtime regression dependencies" OFF)
 if(VSTD_REQUIRE_INTEGRATION_TESTS)
     set(VSTD_INTEGRATION_FIND_MODE REQUIRED)
 else()
     set(VSTD_INTEGRATION_FIND_MODE QUIET)
 endif()
-find_package(SDL2 ${VSTD_INTEGRATION_FIND_MODE})
+if(VSTD_REQUIRE_SDL_TESTS)
+    find_package(SDL2 REQUIRED)
+else()
+    find_package(SDL2 ${VSTD_INTEGRATION_FIND_MODE})
+endif()
 if(SDL2_FOUND)
+    add_executable(veventloop_startup_regressions tests/veventloop_startup_regressions.cpp)
+    target_include_directories(veventloop_startup_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(veventloop_startup_regressions PRIVATE SDL_MAIN_HANDLED)
+    target_link_libraries(veventloop_startup_regressions PRIVATE SDL2::SDL2 Threads::Threads)
+    add_test(NAME veventloop_startup_regressions COMMAND veventloop_startup_regressions)
+    set_tests_properties(veventloop_startup_regressions PROPERTIES TIMEOUT 20
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+
     add_executable(vruntime_regressions tests/vruntime_regressions.cpp)
     target_include_directories(vruntime_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(vruntime_regressions PRIVATE SDL_MAIN_HANDLED)
@@ -199,6 +212,7 @@ if(CLANG_FORMAT_EXE)
             tests/vutil_regressions.cpp
             tests/vthreadpool_regressions.cpp
             tests/vruntime_regressions.cpp
+            tests/veventloop_startup_regressions.cpp
             tests/vconverter_regressions.cpp
             benchmarks/vneuro_bench.cpp)
 
