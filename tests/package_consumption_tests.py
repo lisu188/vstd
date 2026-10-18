@@ -1,8 +1,11 @@
 """Install, relocate, and compile an independent public-target-only consumer."""
 import argparse
+from contextlib import contextmanager
+import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 
 
 def run(*arguments):
@@ -19,6 +22,28 @@ def cache_values(build):
     return values
 
 
+@contextmanager
+def consumer_workspace(build):
+    directory = tempfile.TemporaryDirectory(prefix="package-consumer-", dir=build)
+    workspace = Path(directory.name).resolve()
+    if workspace.parent != build:
+        raise RuntimeError("Generated workspace escaped its build directory")
+    try:
+        yield workspace
+    finally:
+        # Windows tooling can briefly hold an executable directory after CTest.
+        # Retry only sharing/access violations; persistent cleanup errors still fail.
+        for attempt in range(6):
+            try:
+                directory.cleanup()
+                break
+            except PermissionError as error:
+                if os.name != "nt" or error.winerror not in (5, 32) or attempt == 5:
+                    raise
+                print("Waiting for Windows to release the consumer workspace", flush=True)
+                time.sleep(0.1 * 2 ** attempt)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--build", type=Path, required=True)
@@ -27,8 +52,7 @@ def main():
     build = args.build.resolve(strict=True)
     root = Path(__file__).resolve().parents[1]
     cache = cache_values(build)
-    with tempfile.TemporaryDirectory(prefix="package-consumer-", dir=build) as temporary:
-        workspace = Path(temporary).resolve()
+    with consumer_workspace(build) as workspace:
         installed = workspace / "installed"
         relocated = workspace / "relocated"
         run("cmake", "--install", build, "--prefix", installed, "--config", args.config)
