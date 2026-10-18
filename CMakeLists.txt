@@ -114,7 +114,7 @@ if(VSTD_BUILD_BENCHMARKS)
 endif()
 
 foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests vfunctional_tests vstring_tests
-                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests)
+                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests vcache_regressions)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_link_libraries(${TEST_NAME} PRIVATE vstd::headers)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
@@ -228,6 +228,7 @@ if(CLANG_FORMAT_EXE)
             tests/vtask_tests.cpp
             tests/vbind_tests.cpp
             tests/vutil_regressions.cpp
+            tests/vcache_regressions.cpp
             tests/vthreadpool_regressions.cpp
             tests/vruntime_regressions.cpp
             tests/veventloop_startup_regressions.cpp

@@ -19,54 +19,80 @@
 #pragma once
 
 #include <functional>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
 namespace vstd
 {
+namespace detail
+{
+template <typename Key, typename Value> class cache_storage
+{
+    struct entry
+    {
+        Value value;
+        int inserted_at;
+        int ttl;
+
+        bool valid_at(int time) const noexcept
+        {
+            // Ordered signed ticks have an exact unsigned elapsed difference, even
+            // across zero. Avoid forming an overflowing signed expiry deadline.
+            using unsigned_tick = std::make_unsigned_t<int>;
+            return time >= inserted_at && static_cast<unsigned_tick>(time) - static_cast<unsigned_tick>(inserted_at) <=
+                                              static_cast<unsigned_tick>(ttl);
+        }
+    };
+
+    std::unordered_map<Key, entry> _values;
+
+  public:
+    template <typename Loader> Value get(Key key, int time, Loader&& load, int (*get_ttl)())
+    {
+        auto it = _values.find(key);
+        if (it != _values.end())
+        {
+            if (it->second.valid_at(time))
+            {
+                return it->second.value;
+            }
+            _values.erase(it);
+        }
+
+        Value value = std::invoke(std::forward<Loader>(load));
+        const int ttl = get_ttl();
+        if (ttl >= 0)
+        {
+            _values.emplace(std::move(key), entry{value, time, ttl});
+        }
+        return value;
+    }
+};
+} // namespace detail
+
+// Integer timestamps and TTLs use caller-defined matching units. A cached value
+// remains valid at the inclusive TTL boundary; zero TTL reuses the same tick.
+// Negative TTLs bypass storage. A backward tick invalidates that key's value.
 template <typename key, typename val, val (*get_next)(), int (*get_ttl)()> class cache
 {
-    std::unordered_map<key, std::pair<val, int>> _values;
+    detail::cache_storage<key, val> _storage;
 
   public:
     val get(key k, int time)
     {
-        auto it = _values.find(k);
-        if (it == _values.end())
-        {
-            val ret = get_next();
-            _values.insert(std::make_pair(k, std::make_pair(ret, time + get_ttl())));
-            return ret;
-        }
-        if ((*it).second.second < time)
-        {
-            _values.erase(it);
-            return get(k, time);
-        }
-        return (*it).second.first;
+        return _storage.get(std::move(k), time, get_next, get_ttl);
     }
 };
 
 template <typename key, typename val, int (*get_ttl)()> class cache2
 {
-    std::unordered_map<key, std::pair<val, int>> _values;
+    detail::cache_storage<key, val> _storage;
 
   public:
     val get(key k, int time, std::function<val()> cb)
     {
-        auto it = _values.find(k);
-        if (it == _values.end())
-        {
-            val ret = cb();
-            _values.insert(std::make_pair(k, std::make_pair(ret, time + get_ttl())));
-            return ret;
-        }
-        if ((*it).second.second < time)
-        {
-            _values.erase(it);
-            return get(k, time, cb);
-        }
-        return (*it).second.first;
+        return _storage.get(std::move(k), time, std::move(cb), get_ttl);
     }
 };
 } // namespace vstd

@@ -165,7 +165,14 @@ These are not imposed on the core `vstd::headers` target.
 
 - **`vcache.h`**  
   TTL-style cache templates providing key/value memoization with refresh callbacks or
-  function-based value generation.
+  function-based value generation. The existing `cache::get(key, int time)` and
+  `cache2::get(key, int time, callback)` APIs use caller-defined matching tick/TTL units.
+  Values remain valid at the inclusive TTL boundary and refresh on the first later tick;
+  zero TTL reuses a value only at the insertion tick. Negative TTL returns the loaded
+  value without storing it. A backward tick (including a timer reset/wrap) refreshes
+  that key. Elapsed-time comparison avoids signed deadline/subtraction overflow across
+  the full `int` range. TTL is sampled once after each successful value load; provider
+  exceptions propagate without caching a failed load. These caches remain unsynchronized.
 
 - **`vlazy.h`**  
   Lazy initialization wrapper that materializes and stores a shared object only on

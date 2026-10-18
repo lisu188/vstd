@@ -116,7 +116,7 @@ jobs:
       - name: Sanitize utility and runtime regressions
         run: |
           set -euo pipefail
-          for test in vfunctional_tests vbind_tests vfuture_regressions vutil_regressions vthreadpool_regressions; do
+          for test in vfunctional_tests vbind_tests vfuture_regressions vutil_regressions vthreadpool_regressions vcache_regressions; do
             g++-15 -std=c++26 -O1 -g -pthread -UNDEBUG -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/${test}.cpp -o ${test}-sanitized
             timeout 30 ./${test}-sanitized
           done
