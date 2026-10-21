@@ -25,14 +25,14 @@ template <typename Result, typename... Args> class move_only_function<Result(Arg
     struct callable_base
     {
         virtual ~callable_base() = default;
-        virtual Result invoke(Args... args) = 0;
+        virtual Result invoke(Args&&... args) = 0;
     };
 
     template <typename Function> struct callable final : callable_base
     {
         template <typename Value> explicit callable(Value&& value) : function(std::forward<Value>(value)) {}
 
-        Result invoke(Args... args) override
+        Result invoke(Args&&... args) override
         {
             return std::invoke_r<Result>(function, std::forward<Args>(args)...);
         }

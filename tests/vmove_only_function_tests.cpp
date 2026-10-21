@@ -101,6 +101,27 @@ void forwardingResultsAndExceptions()
     }
 }
 
+#if defined(VSTD_FORCE_PORTABLE_MOVE_ONLY_FUNCTION) || !defined(__cpp_lib_move_only_function)
+struct MoveCount
+{
+    explicit MoveCount(int& moves) : moves(moves) {}
+    MoveCount(MoveCount&& other) : moves(other.moves)
+    {
+        ++moves;
+    }
+    MoveCount(const MoveCount&) = delete;
+    int& moves;
+};
+
+void byValueArgumentMovesOnlyIntoTarget()
+{
+    int moves = 0;
+    vstd::move_only_function<int(MoveCount)> callback = [](MoveCount value) { return value.moves; };
+    assert(callback(MoveCount(moves)) == 1);
+    assert(moves == 1);
+}
+#endif
+
 void schedulerOwnsAndDropsCallbacks()
 {
     int destroyed = 0;
@@ -139,6 +160,9 @@ int main()
     moveOnlyOwnershipAndRepeatedCalls();
     nullTargetsAndSwap();
     forwardingResultsAndExceptions();
+#if defined(VSTD_FORCE_PORTABLE_MOVE_ONLY_FUNCTION) || !defined(__cpp_lib_move_only_function)
+    byValueArgumentMovesOnlyIntoTarget();
+#endif
     schedulerOwnsAndDropsCallbacks();
     threadPoolRunsMoveOnlyCallback();
 }

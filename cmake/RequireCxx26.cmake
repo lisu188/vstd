@@ -54,7 +54,7 @@ vstd_require_cxx26_feature(EXPECTED [[
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/..")
-vstd_require_cxx26_feature(MOVE_ONLY_FUNCTION [[
+vstd_require_cxx26_feature(OWNED_MOVE_ONLY_FUNCTION [[
     #include "vmove_only_function.h"
     #include <memory>
     int main() {
