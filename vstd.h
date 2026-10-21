@@ -33,6 +33,7 @@
 #include "vlazy.h"
 #include "vlogger.h"
 #include "vmeta.h"
+#include "vmove_only_function.h"
 #include "vneuro.h"
 #include "vstring.h"
 #include "vtask.h"

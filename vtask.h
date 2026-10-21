@@ -18,6 +18,8 @@
  */
 #pragma once
 
+#include "vmove_only_function.h"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -54,7 +56,7 @@ class scheduler_rejected : public std::runtime_error
 class scheduler
 {
   public:
-    using function = std::move_only_function<void()>;
+    using function = vstd::move_only_function<void()>;
     using dispatcher = std::function<bool(function)>;
 
     scheduler()

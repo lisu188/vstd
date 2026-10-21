@@ -7,7 +7,12 @@ small algorithmic/data-structure conveniences.
 The build requires CMake 4.0.2 or newer and C++26 with compiler extensions disabled and no standard fallback.
 CI provisions CMake 4.3.1 and tests GCC 15 and Clang 20 on Ubuntu 26.04, plus LLVM 20.1.8 clang-cl with
 the Visual Studio 2022 SDK, runtime, and standard library on Windows 2022. Configuration checks pack indexing,
-deleted-function reasons, coroutines, `std::expected`, and `std::move_only_function` before loading dependencies.
+deleted-function reasons, coroutines, `std::expected`, and `vstd::move_only_function` before loading dependencies.
+The callback type aliases `std::move_only_function` when the standard library supplies it.
+On libc++ it owns an erased callable through a unique pointer; the portable implementation supports
+unqualified `Result(Args...)` signatures, including move-only captures and return values.
+It does not add declarations to `std` or lower the required language standard.
+CI also forces the portable implementation when testing callbacks, tasks, and thread pools.
 Consumers using CMake can link `vstd::headers` to inherit the `cxx_std_26` requirement. See the
 [C++ guidelines](docs/cpp-guidelines.md) for supported standard-library idioms,
 compatibility contracts, and validation requirements.
@@ -93,7 +98,7 @@ must not retain shared ownership of the pool itself.
 
 - **`vtask.h`**
   Lazy move-only coroutine tasks, shared task handles, task groups, cooperative cancellation, scheduler-aware
-  continuations, and ordered joins. Owned one-shot work uses `std::move_only_function`; reusable observers retain
+  continuations, and ordered joins. Owned one-shot work uses `vstd::move_only_function`; reusable observers retain
   their copyable callback contracts. Legacy `vfuture.h` remains available to existing consumers.
 
 - **`vthreadpool.h`**  

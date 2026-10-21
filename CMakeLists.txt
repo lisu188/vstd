@@ -43,6 +43,7 @@ set(SOURCE_FILES
         vhex.h
         vlazy.h
         vlogger.h
+        vmove_only_function.h
         vthread.h
         vthreadpool.h
         vtraits.h
@@ -91,7 +92,7 @@ if(VSTD_BUILD_BENCHMARKS)
 endif()
 
 foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests vfunctional_tests vstring_tests
-                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests)
+                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests vmove_only_function_tests)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
     target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${TEST_NAME} PRIVATE vstd::headers Threads::Threads)
@@ -101,6 +102,28 @@ foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrando
     else()
         target_compile_options(${TEST_NAME} PRIVATE -UNDEBUG)
     endif()
+endforeach()
+add_executable(vmove_only_function_portable_tests tests/vmove_only_function_tests.cpp)
+target_link_libraries(vmove_only_function_portable_tests PRIVATE vstd::headers Threads::Threads)
+target_compile_definitions(vmove_only_function_portable_tests PRIVATE VSTD_FORCE_PORTABLE_MOVE_ONLY_FUNCTION=1)
+if(MSVC)
+    target_compile_options(vmove_only_function_portable_tests PRIVATE /UNDEBUG)
+else()
+    target_compile_options(vmove_only_function_portable_tests PRIVATE -UNDEBUG)
+endif()
+add_test(NAME vmove_only_function_portable_tests COMMAND vmove_only_function_portable_tests)
+set_tests_properties(vmove_only_function_tests vmove_only_function_portable_tests PROPERTIES TIMEOUT 20)
+foreach(TEST_NAME vtask_tests vthreadpool_regressions)
+    add_executable(${TEST_NAME}_portable tests/${TEST_NAME}.cpp)
+    target_link_libraries(${TEST_NAME}_portable PRIVATE vstd::headers Threads::Threads)
+    target_compile_definitions(${TEST_NAME}_portable PRIVATE VSTD_FORCE_PORTABLE_MOVE_ONLY_FUNCTION=1)
+    if(MSVC)
+        target_compile_options(${TEST_NAME}_portable PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(${TEST_NAME}_portable PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME ${TEST_NAME}_portable COMMAND ${TEST_NAME}_portable)
+    set_tests_properties(${TEST_NAME}_portable PROPERTIES TIMEOUT 20)
 endforeach()
 set_tests_properties(vfuture_regressions vthreadpool_regressions PROPERTIES TIMEOUT 20)
 
@@ -211,6 +234,7 @@ if(CLANG_FORMAT_EXE)
             tests/vbind_tests.cpp
             tests/vutil_regressions.cpp
             tests/vthreadpool_regressions.cpp
+            tests/vmove_only_function_tests.cpp
             tests/vruntime_regressions.cpp
             tests/veventloop_startup_regressions.cpp
             tests/vconverter_regressions.cpp

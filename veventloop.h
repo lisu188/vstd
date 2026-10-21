@@ -18,6 +18,8 @@
  */
 #pragma once
 
+#include "vmove_only_function.h"
+
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
 #elif __has_include(<SDL.h>)
@@ -53,7 +55,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     {
         clock::time_point due;
         std::size_t id;
-        std::shared_ptr<std::move_only_function<void()>> function;
+        std::shared_ptr<vstd::move_only_function<void()>> function;
         std::shared_ptr<std::atomic_bool> cancelled;
     };
 
@@ -67,14 +69,14 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     {
         std::size_t id;
         std::function<bool()> predicate;
-        std::shared_ptr<std::move_only_function<void()>> function;
+        std::shared_ptr<vstd::move_only_function<void()>> function;
         std::shared_ptr<std::atomic_bool> cancelled;
         std::atomic_bool evaluating{false};
 
-        conditional_task(std::size_t id, std::function<bool()> predicate, std::move_only_function<void()> function,
+        conditional_task(std::size_t id, std::function<bool()> predicate, vstd::move_only_function<void()> function,
                          std::shared_ptr<std::atomic_bool> cancelled)
             : id(id), predicate(std::move(predicate)),
-              function(std::make_shared<std::move_only_function<void()>>(std::move(function))),
+              function(std::make_shared<vstd::move_only_function<void()>>(std::move(function))),
               cancelled(std::move(cancelled))
         {
         }
@@ -83,7 +85,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
     struct PostedTask
     {
         std::size_t id;
-        std::move_only_function<void()> function;
+        vstd::move_only_function<void()> function;
     };
 
     template <typename Function> struct RegisteredCallback
@@ -150,7 +152,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         return loop;
     }
 
-    bool invoke(std::move_only_function<void()> function)
+    bool invoke(vstd::move_only_function<void()> function)
     {
         try
         {
@@ -168,12 +170,12 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void invoke_when(const std::function<bool()>& predicate, std::move_only_function<void()> function)
+    void invoke_when(const std::function<bool()>& predicate, vstd::move_only_function<void()> function)
     {
         scheduleWhen(predicate, std::move(function)).release();
     }
 
-    connection scheduleWhen(const std::function<bool()>& predicate, std::move_only_function<void()> function)
+    connection scheduleWhen(const std::function<bool()>& predicate, vstd::move_only_function<void()> function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
         auto cancelled = std::make_shared<std::atomic_bool>(false);
@@ -226,12 +228,12 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         }
     }
 
-    void delay(int milliseconds, std::move_only_function<void()> function)
+    void delay(int milliseconds, vstd::move_only_function<void()> function)
     {
         scheduleAfter(milliseconds, std::move(function)).release();
     }
 
-    connection scheduleAfter(int milliseconds, std::move_only_function<void()> function)
+    connection scheduleAfter(int milliseconds, vstd::move_only_function<void()> function)
     {
         const auto id = nextId.fetch_add(1, std::memory_order_relaxed);
         auto cancelled = std::make_shared<std::atomic_bool>(false);
@@ -240,7 +242,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
             std::lock_guard lock(delays->mutex);
             delays->queue.emplace(std::make_pair(due, id),
                                   delayed_task{due, id,
-                                               std::make_shared<std::move_only_function<void()>>(std::move(function)),
+                                               std::make_shared<vstd::move_only_function<void()>>(std::move(function)),
                                                cancelled});
         }
         wake();
@@ -530,7 +532,7 @@ template <typename T = void> class event_loop : public std::enable_shared_from_t
         std::size_t processed = 0;
         while (true)
         {
-            std::move_only_function<void()> function;
+            vstd::move_only_function<void()> function;
             {
                 std::lock_guard lock(taskMutex);
                 if (taskQueue.empty() || taskQueue.front().id > lastTaskId)
