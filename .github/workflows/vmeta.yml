@@ -34,6 +34,8 @@ jobs:
       - run: cmake --build build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --target format-check
       - run: cmake --build build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --parallel 2
       - run: ctest --test-dir build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --output-on-failure
+      - name: Verify installed relocation and build-tree package consumers
+        run: python tests/package_consumption_tests.py --build build-cxx26-${{ matrix.compiler }}-${{ matrix.config }} --config ${{ matrix.config }}
   windows:
     runs-on: windows-2022
     strategy:
@@ -87,6 +89,8 @@ jobs:
       - run: cmake --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --target format-check
       - run: cmake --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --parallel 2
       - run: ctest --test-dir build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --output-on-failure
+      - name: Verify installed relocation and build-tree package consumers
+        run: python tests/package_consumption_tests.py --build build-cxx26-clang-cl-20.1.8-${{ matrix.config }} --config ${{ matrix.config }}
   sanitizers:
     runs-on: ubuntu-26.04
     strategy:
@@ -112,7 +116,7 @@ jobs:
       - name: Sanitize utility and runtime regressions
         run: |
           set -euo pipefail
-          for test in vfunctional_tests vbind_tests vfuture_regressions vutil_regressions vthreadpool_regressions; do
+          for test in vfunctional_tests vbind_tests vfuture_regressions vutil_regressions vthreadpool_regressions vcache_regressions; do
             g++-15 -std=c++26 -O1 -g -pthread -UNDEBUG -I. -fno-omit-frame-pointer -fsanitize=${{ matrix.sanitizer }} tests/${test}.cpp -o ${test}-sanitized
             timeout 30 ./${test}-sanitized
           done

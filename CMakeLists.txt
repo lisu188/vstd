@@ -9,7 +9,7 @@
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 cmake_minimum_required(VERSION 4.0.2)
-project(vstd LANGUAGES CXX)
+project(vstd VERSION 0.1.0 LANGUAGES CXX)
 
 if(POLICY CMP0167)
   cmake_policy(SET CMP0167 NEW)
@@ -21,15 +21,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/RequireCxx26.cmake)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 add_library(vstd_headers INTERFACE)
 add_library(vstd::headers ALIAS vstd_headers)
 target_compile_features(vstd_headers INTERFACE cxx_std_26)
-target_include_directories(vstd_headers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(vstd_headers PROPERTIES EXPORT_NAME headers)
+target_include_directories(vstd_headers INTERFACE
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/vstd>")
 
 find_package(Boost 1.58 REQUIRED COMPONENTS filesystem)
 find_package(Threads REQUIRED)
 
-include_directories(${Boost_INCLUDE_DIRS})
+target_link_libraries(vstd_headers INTERFACE Boost::headers Boost::filesystem Threads::Threads)
 
 set(SOURCE_FILES
         vadaptors.h
@@ -60,15 +66,30 @@ set(SOURCE_FILES
         vtuple.h
         veventloop.h)
 
+set(VSTD_PACKAGE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/vstd")
+install(TARGETS vstd_headers EXPORT vstdTargets)
+install(FILES ${SOURCE_FILES} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/vstd")
+install(FILES LICENSE.md DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/licenses/vstd")
+install(EXPORT vstdTargets NAMESPACE vstd:: DESTINATION "${VSTD_PACKAGE_INSTALL_DIR}")
+export(EXPORT vstdTargets NAMESPACE vstd:: FILE "${CMAKE_CURRENT_BINARY_DIR}/vstdTargets.cmake")
+configure_package_config_file(cmake/vstdConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/vstdConfig.cmake"
+    INSTALL_DESTINATION "${VSTD_PACKAGE_INSTALL_DIR}")
+write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/vstdConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}" COMPATIBILITY SameMinorVersion ARCH_INDEPENDENT)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/vstdConfig.cmake"
+              "${CMAKE_CURRENT_BINARY_DIR}/vstdConfigVersion.cmake"
+    DESTINATION "${VSTD_PACKAGE_INSTALL_DIR}")
+
 add_executable(vstd ${SOURCE_FILES} main.cpp)
 
-target_link_libraries(vstd PRIVATE vstd::headers Boost::filesystem Threads::Threads)
+target_link_libraries(vstd PRIVATE vstd::headers)
 
 enable_testing()
 
 add_executable(vmeta_tests tests/vmeta_tests.cpp)
-target_include_directories(vmeta_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(vmeta_tests PRIVATE Boost::filesystem Threads::Threads)
+
+target_link_libraries(vmeta_tests PRIVATE vstd::headers)
 add_test(NAME vmeta_tests COMMAND vmeta_tests)
 if(MSVC)
     target_compile_options(vmeta_tests PRIVATE /UNDEBUG)
@@ -77,7 +98,8 @@ else()
 endif()
 
 add_executable(vneuro_tests tests/vneuro_tests.cpp)
-target_include_directories(vneuro_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(vneuro_tests PRIVATE vstd::headers)
+
 add_test(NAME vneuro_tests COMMAND vneuro_tests)
 if(MSVC)
     target_compile_options(vneuro_tests PRIVATE /UNDEBUG)
@@ -88,14 +110,15 @@ endif()
 option(VSTD_BUILD_BENCHMARKS "Build vstd benchmarks" OFF)
 if(VSTD_BUILD_BENCHMARKS)
     add_executable(vneuro_bench benchmarks/vneuro_bench.cpp)
-    target_include_directories(vneuro_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(vneuro_bench PRIVATE vstd::headers)
+
 endif()
 
 foreach(TEST_NAME vmeta_regressions vmeta_allocations vfuture_regressions vrandom_tests vfunctional_tests vstring_tests
-                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests vmove_only_function_tests)
+                  vbind_tests vutil_regressions vthreadpool_regressions vtask_tests vcache_regressions
+                  vmove_only_function_tests)
     add_executable(${TEST_NAME} tests/${TEST_NAME}.cpp)
-    target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(${TEST_NAME} PRIVATE vstd::headers Threads::Threads)
+    target_link_libraries(${TEST_NAME} PRIVATE vstd::headers)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     if(MSVC)
         target_compile_options(${TEST_NAME} PRIVATE /UNDEBUG)
@@ -141,17 +164,15 @@ else()
 endif()
 if(SDL2_FOUND)
     add_executable(veventloop_startup_regressions tests/veventloop_startup_regressions.cpp)
-    target_include_directories(veventloop_startup_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(veventloop_startup_regressions PRIVATE SDL_MAIN_HANDLED)
-    target_link_libraries(veventloop_startup_regressions PRIVATE SDL2::SDL2 Threads::Threads)
+    target_link_libraries(veventloop_startup_regressions PRIVATE vstd::headers SDL2::SDL2)
     add_test(NAME veventloop_startup_regressions COMMAND veventloop_startup_regressions)
     set_tests_properties(veventloop_startup_regressions PROPERTIES TIMEOUT 20
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     add_executable(vruntime_regressions tests/vruntime_regressions.cpp)
-    target_include_directories(vruntime_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(vruntime_regressions PRIVATE SDL_MAIN_HANDLED)
-    target_link_libraries(vruntime_regressions PRIVATE SDL2::SDL2 Threads::Threads)
+    target_link_libraries(vruntime_regressions PRIVATE vstd::headers SDL2::SDL2)
     add_test(NAME vruntime_regressions COMMAND vruntime_regressions)
     set_tests_properties(vruntime_regressions PROPERTIES TIMEOUT 20
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy" LABELS performance)
@@ -163,7 +184,7 @@ if(SDL2_FOUND)
 
     add_executable(vtask_eventloop_tests tests/vtask_tests.cpp)
     target_compile_definitions(vtask_eventloop_tests PRIVATE VSTD_TEST_EVENT_LOOP=1)
-    target_link_libraries(vtask_eventloop_tests PRIVATE vstd::headers Threads::Threads SDL2::SDL2)
+    target_link_libraries(vtask_eventloop_tests PRIVATE vstd::headers SDL2::SDL2)
     add_test(NAME vtask_eventloop_tests COMMAND vtask_eventloop_tests)
     set_tests_properties(vtask_eventloop_tests PROPERTIES TIMEOUT 20
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
@@ -182,8 +203,7 @@ if(Python3_Development_FOUND)
     find_package(Boost 1.58 ${VSTD_INTEGRATION_FIND_MODE} COMPONENTS ${VSTD_BOOST_PYTHON_COMPONENT})
     if(TARGET Boost::${VSTD_BOOST_PYTHON_COMPONENT})
         add_executable(vconverter_regressions tests/vconverter_regressions.cpp)
-        target_include_directories(vconverter_regressions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-        target_link_libraries(vconverter_regressions PRIVATE Boost::${VSTD_BOOST_PYTHON_COMPONENT} Python3::Python)
+        target_link_libraries(vconverter_regressions PRIVATE vstd::headers Boost::${VSTD_BOOST_PYTHON_COMPONENT} Python3::Python)
         add_test(NAME vconverter_regressions COMMAND vconverter_regressions)
         set_tests_properties(vconverter_regressions PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
     else()
@@ -213,8 +233,7 @@ file(WRITE ${HEADER_SELF_SUFFICIENCY_MAIN} "int main() { return 0; }\n")
 list(APPEND HEADER_SELF_SUFFICIENCY_SOURCES ${HEADER_SELF_SUFFICIENCY_MAIN})
 
 add_executable(header_self_sufficiency_tests ${HEADER_SELF_SUFFICIENCY_SOURCES})
-target_include_directories(header_self_sufficiency_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(header_self_sufficiency_tests PRIVATE Boost::filesystem Threads::Threads)
+target_link_libraries(header_self_sufficiency_tests PRIVATE vstd::headers)
 add_test(NAME header_self_sufficiency_tests COMMAND header_self_sufficiency_tests)
 
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
@@ -233,12 +252,14 @@ if(CLANG_FORMAT_EXE)
             tests/vtask_tests.cpp
             tests/vbind_tests.cpp
             tests/vutil_regressions.cpp
+            tests/vcache_regressions.cpp
             tests/vthreadpool_regressions.cpp
             tests/vmove_only_function_tests.cpp
             tests/vruntime_regressions.cpp
             tests/veventloop_startup_regressions.cpp
             tests/vconverter_regressions.cpp
-            benchmarks/vneuro_bench.cpp)
+            benchmarks/vneuro_bench.cpp
+            tests/package_consumer/main.cpp)
 
     add_custom_target(format
             COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_FILES}

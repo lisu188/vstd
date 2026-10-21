@@ -33,6 +33,30 @@ allowing that task and dependent peer tasks to finish. Restarting creates an ind
 Custom worker templates receive a shared queue state exposing `pop_task`; a worker
 must not retain shared ownership of the pool itself.
 
+## CMake package consumption
+
+The initial CMake package metadata version is `0.1.0`. Configure and install with
+`cmake -S . -B build` and `cmake --install build --prefix /your/prefix`, then use:
+
+```cmake
+find_package(vstd 0.1 CONFIG REQUIRED)
+add_executable(app main.cpp)
+target_link_libraries(app PRIVATE vstd::headers)
+```
+
+Set `CMAKE_PREFIX_PATH` to the installed prefix. The target supplies the C++26
+requirement, public include directory, `Boost::headers`, `Boost::filesystem` and
+`Threads::Threads`; consumers do not need separate dependency discovery or link
+flags for the core headers. Include them as `<vstd.h>`, `<vthreadpool.h>`, etc.
+The same package can be loaded from a configured build tree with `vstd_DIR`.
+Installed include and package paths are relative to the prefix and remain usable
+after moving the installation. CI builds and runs separate consumers against both
+forms on GCC, Clang and Windows clang-cl in Debug and Release configurations.
+
+The optional `veventloop.h` and `vconverter.h` integrations still require callers
+to provide SDL2 or Boost.Python/Python development dependencies respectively.
+These are not imposed on the core `vstd::headers` target.
+
 ## Design overview
 
 - **Header-first distribution**: most functionality lives in `v*.h` headers and can be
@@ -146,7 +170,14 @@ must not retain shared ownership of the pool itself.
 
 - **`vcache.h`**  
   TTL-style cache templates providing key/value memoization with refresh callbacks or
-  function-based value generation.
+  function-based value generation. The existing `cache::get(key, int time)` and
+  `cache2::get(key, int time, callback)` APIs use caller-defined matching tick/TTL units.
+  Values remain valid at the inclusive TTL boundary and refresh on the first later tick;
+  zero TTL reuses a value only at the insertion tick. Negative TTL returns the loaded
+  value without storing it. A backward tick (including a timer reset/wrap) refreshes
+  that key. Elapsed-time comparison avoids signed deadline/subtraction overflow across
+  the full `int` range. TTL is sampled once after each successful value load; provider
+  exceptions propagate without caching a failed load. These caches remain unsynchronized.
 
 - **`vlazy.h`**  
   Lazy initialization wrapper that materializes and stores a shared object only on
