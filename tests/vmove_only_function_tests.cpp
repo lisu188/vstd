@@ -23,9 +23,11 @@ static_assert(!std::is_same_v<Callback, std::move_only_function<int()>>);
 static_assert(!std::is_copy_constructible_v<Callback>);
 static_assert(!std::is_copy_assignable_v<Callback>);
 static_assert(std::is_nothrow_move_constructible_v<Callback>);
-static_assert(std::is_nothrow_move_assignable_v<Callback>);
 static_assert(!std::is_constructible_v<Callback, int>);
+#if defined(VSTD_FORCE_PORTABLE_MOVE_ONLY_FUNCTION) || !defined(__cpp_lib_move_only_function)
+static_assert(std::is_nothrow_move_assignable_v<Callback>);
 static_assert(!std::is_constructible_v<vstd::move_only_function<const int&()>, int (*)()>);
+#endif
 
 struct Lifetime
 {
