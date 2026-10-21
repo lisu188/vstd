@@ -18,6 +18,8 @@
  */
 #pragma once
 
+#include "vmove_only_function.h"
+
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -58,7 +60,7 @@ class ThreadPoolWorkerScope
 class ThreadPoolQueue
 {
   public:
-    bool push_task(std::move_only_function<void()> task)
+    bool push_task(vstd::move_only_function<void()> task)
     {
         std::unique_lock lock(_lock);
         if (_shutdown)
@@ -70,7 +72,7 @@ class ThreadPoolQueue
         return true;
     }
 
-    bool pop_task(std::move_only_function<void()>& task, std::stop_token stop_token)
+    bool pop_task(vstd::move_only_function<void()>& task, std::stop_token stop_token)
     {
         std::unique_lock lock(_lock);
         std::stop_callback on_stop(stop_token, [this]() { _condition.notify_all(); });
@@ -93,7 +95,7 @@ class ThreadPoolQueue
     }
 
   private:
-    std::queue<std::move_only_function<void()>> _queue;
+    std::queue<vstd::move_only_function<void()>> _queue;
     std::mutex _lock;
     std::condition_variable _condition;
     bool _shutdown = false;
@@ -105,7 +107,7 @@ class worker_thread
     template <typename thread_pool_type>
     void operator()(std::stop_token stop_token, std::shared_ptr<thread_pool_type> pool)
     {
-        std::move_only_function<void()> task;
+        vstd::move_only_function<void()> task;
         while (pool->pop_task(task, stop_token))
         {
             try
@@ -140,7 +142,7 @@ class thread_pool : public std::enable_shared_from_this<thread_pool<_worker_coun
         queue->push_task(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
     }
 
-    bool submit(std::move_only_function<void()> task)
+    bool submit(vstd::move_only_function<void()> task)
     {
         std::shared_ptr<detail::ThreadPoolQueue> queue;
         {

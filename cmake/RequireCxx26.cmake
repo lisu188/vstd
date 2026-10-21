@@ -51,11 +51,15 @@ vstd_require_cxx26_feature(EXPECTED [[
     int main() { std::expected<int, int> value{4}; return value.value() - 4; }
 ]])
 
-vstd_require_cxx26_feature(MOVE_ONLY_FUNCTION [[
-    #include <functional>
+include(CMakePushCheckState)
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/..")
+vstd_require_cxx26_feature(OWNED_MOVE_ONLY_FUNCTION [[
+    #include "vmove_only_function.h"
     #include <memory>
     int main() {
-        std::move_only_function<int()> callback = [value = std::make_unique<int>(4)] { return *value; };
+        vstd::move_only_function<int()> callback = [value = std::make_unique<int>(4)] { return *value; };
         return callback() - 4;
     }
 ]])
+cmake_pop_check_state()
