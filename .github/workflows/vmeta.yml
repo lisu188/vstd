@@ -63,7 +63,7 @@ jobs:
           }
           'C:\Program Files\LLVM\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - name: Cache Boost dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: C:\vcpkg\installed
           key: vstd-cxx26-windows-2022-clang-cl-20.1.8-x64-windows-${{ hashFiles('.github/workflows/vmeta.yml') }}
