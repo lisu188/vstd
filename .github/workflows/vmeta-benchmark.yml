@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           ref: 3975b9de3ddb3106a24c420ee94410dd7161d2ea
           path: before
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: 81da44fbde24db8e50b2704038f43232147cc62f
           path: after
